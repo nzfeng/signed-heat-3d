@@ -73,11 +73,11 @@ add_subdirectory(../../Forks/geometry-central deps/geometry-central)
 add_subdirectory(../../Forks/polyscope deps/polyscope)
 #add_subdirectory(deps/geometry-central)
 #add_subdirectory(deps/polyscope)
+add_subdirectory(deps/tetgen)
 
 # == Build our project stuff
 
 set(SRCS
-  src/utils.cpp
   src/signed_heat_tet_solver.cpp
   src/signed_heat_grid_solver.cpp
   src/main.cpp
@@ -85,7 +85,11 @@ set(SRCS
 
 add_executable(main "${SRCS}")
 target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/")
+target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/tetgen/")
 
 # add the args.hxx project which we use for command line args
-target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../Forks/polyscope/deps/args")
-target_link_libraries(main geometry-central polyscope)
+target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/polyscope/deps/args")
+target_link_libraries(main geometry-central polyscope tetgen)
+
+# Add libIGL in header-only mode.
+target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/libigl/include")

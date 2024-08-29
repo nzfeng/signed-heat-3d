@@ -7,10 +7,35 @@ SignedHeatTetSolver::SignedHeatTetSolver() {}
 Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geometry,
                                                     const SignedHeat3DOptions& options) {
 
-    buildTetMesh(options, false);
+    if (options.rebuild) {
+        double meanFaceArea = 0.;
+        SurfaceMesh& mesh = geometry.mesh;
+        geometry.requireFaceAreas();
+        for (Face f : mesh.faces()) meanFaceArea += geometry.faceAreas[f];
+        meanFaceArea /= mesh.nFaces();
+        geometry.unrequireFaceAreas();
+        double areaScale = std::pow(10, -options.hCoef);
+        TETFLAGS = TET_PREFIX + std::to_string(areaScale * meanFaceArea);
+        TETFLAGS_PRESERVE = TET_PREFIX + std::to_string(areaScale * meanFaceArea) + "Y";
+        tetmeshDomain(geometry);
+
+        // With direct convolution in R^3, it's not clear what we should pick as our timestep. Just use the
+        // tetmesh/trimesh as a proxy.
+        meanNodeSpacing = computeMeanNodeSpacing();
+        shortTime = options.tCoef * meanNodeSpacing * meanNodeSpacing;
+        tetVolumes = computeTetVolumes();
+        laplaceMat = buildCrouzeixRaviartLaplacian();
+        massMat = buildCrouzeixRaviartMassMatrix();
+        avgMat = buildAveragingMatrix();
+        poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
+        SparseMatrix<double> P = avgMat.transpose() * massMat * avgMat;
+        projectionSolver.reset(new SquareSolver<double>(P));
+        if (VERBOSE) std::cerr << "Tet mesh rebuilt" << std::endl;
+    }
 
     if (VERBOSE) std::cerr << "Step 1..." << std::endl;
-    Eigen::MatrixXd Xt = Eigen::MatrixXd::Zero(nTets, 3);
+    Eigen::MatrixXd Yt = Eigen::MatrixXd::Zero(nTets, 3);
+    double lambda = std::sqrt(1. / shortTime);
     SurfaceMesh& mesh = geometry.mesh;
     geometry.requireFaceNormals();
     geometry.requireFaceAreas();
@@ -19,7 +44,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
         // Compute query point.
         Vector3 q = {0, 0, 0};
         for (int j = 0; j < 4; j++) {
-            for (int k = 0; k < 3; k++) q += vertices(tets(i, j), k);
+            for (int k = 0; k < 3; k++) q[k] += vertices(tets(i, j), k);
         }
         q /= 4.;
         // Integrate contributions.
@@ -33,7 +58,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
             X += std::exp(-lambda * r) / r * n * geometry.faceAreas[f];
         }
         X /= X.norm();
-        for (int j = 0; j < 3; j++) Yt(i, j) = [j];
+        for (int j = 0; j < 3; j++) Yt(i, j) = X[j];
     }
     geometry.unrequireFaceNormals();
     if (VERBOSE) std::cerr << "Steps 1 & 2 completed." << std::endl;
@@ -41,13 +66,13 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
     if (VERBOSE) std::cerr << "Steps 3..." << std::endl;
     Vector<double> div = faceDivergence(Yt);
     Vector<double> phi;
-    if (options.levelsetConstraint == LevelSetConstraint::ZeroSet) {
+    if (options.levelSetConstraint == LevelSetConstraint::ZeroSet) {
         // Since the tet mesh conforms to the surface, preserving zero can be done via Dirichlet boundary conditions.
         Vector<bool> setAMembership = Vector<bool>::Ones(nFaces); // true if "interior" (non-fixed)
         for (const auto& fIdx : surfaceFaces) setAMembership[abs(fIdx)] = false;
         int nB = nFaces - setAMembership.cast<int>().sum(); // Eigen sum() casts to bool after summing
         Vector<double> bcVals = Vector<double>::Zero(nB);
-        BlockDecompositionResult<double> decomp = blockDecomposeSquare(L, setAMembership, true);
+        BlockDecompositionResult<double> decomp = blockDecomposeSquare(laplaceMat, setAMembership, true);
         Vector<double> rhsValsA, rhsValsB;
         decomposeVector(decomp, div, rhsValsA, rhsValsB);
         Vector<double> combinedRHS = rhsValsA;
@@ -55,7 +80,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
         Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
         phi = reassembleVector(decomp, Aresult, bcVals);
         phi *= -1;
-    } else if (options.levelsetConstraint == LevelSetConstraint::Multiple) {
+    } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
         // Determine the connected components of the mesh. Do simple depth-first search.
         std::vector<Eigen::Triplet<double>> triplets;
         SparseMatrix<double> A;
@@ -67,7 +92,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
             if (marked[f]) continue;
             marked[f] = true;
             std::vector<Face> queue = {f};
-            size_t f0 = geometry.facesIndices[f];
+            size_t f0 = geometry.faceIndices[f];
             Face curr;
             while (!queue.empty()) {
                 curr = queue.back();
@@ -95,7 +120,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
         Vector<double> soln = solveSquare(LHS, RHS);
         phi = soln.head(F);
     } else {
-        poissonSolver.solve(div);
+        poissonSolver->solve(div);
         phi *= -1;
         double shift = 0.;
         double totalArea = 0.;
@@ -104,7 +129,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
             shift += A * phi[i];
             totalArea += A;
         }
-        return shift /= totalArea;
+        shift /= totalArea;
         phi -= shift * Vector<double>::Ones(nFaces);
     }
     phi = projectOntoVertices(phi);
@@ -115,15 +140,35 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
     return phi;
 }
 
-Vector<double> SignedHeatTetSolver::computeDistance(PointPositionNormalGeometry& pointGeom,
+Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNormalGeometry& pointGeom,
                                                     const SignedHeat3DOptions& options) {
 
-    buildTetMesh(options, true);
+    pointGeom.requireTuftedTriangulation();
+    pointGeom.tuftedGeom->requireVertexDualAreas();
+
+    if (options.rebuild) {
+        double meanArea = 0.;
+        for (size_t i = 0; i < pointGeom.cloud.nPoints(); i++) meanArea = pointGeom.tuftedGeom->vertexDualAreas[i];
+        meanArea /= pointGeom.cloud.nPoints();
+        double areaScale = std::pow(10, -options.hCoef);
+        TETFLAGS = TET_PREFIX + std::to_string(areaScale * meanArea);
+        TETFLAGS_PRESERVE = TET_PREFIX + std::to_string(areaScale * meanArea) + "Y";
+        tetmeshPointCloud(pointGeom);
+        // With direct convolution in R^3, it's not clear what we should pick as our timestep. Just use the
+        // tetmesh/trimesh as a proxy.
+        meanNodeSpacing = computeMeanNodeSpacing();
+        shortTime = options.tCoef * meanNodeSpacing * meanNodeSpacing;
+        tetVolumes = computeTetVolumes();
+        laplaceMat = buildCrouzeixRaviartLaplacian();
+        massMat = buildCrouzeixRaviartMassMatrix();
+        avgMat = buildAveragingMatrix();
+        poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
+        SparseMatrix<double> P = avgMat.transpose() * massMat * avgMat;
+        projectionSolver.reset(new SquareSolver<double>(P));
+        if (VERBOSE) std::cerr << "Tet mesh rebuilt" << std::endl;
+    }
 
     if (VERBOSE) std::cerr << "Step 1..." << std::endl;
-
-    pointGeom->requireTuftedTriangulation();
-    pointGeom->tuftedGeom->requireVertexDualAreas();
 
     // Evaluate vectors at tet barycenters.
     size_t P = pointGeom.cloud.nPoints();
@@ -133,7 +178,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(PointPositionNormalGeometry&
         // Compute query point.
         Vector3 q = {0, 0, 0};
         for (int j = 0; j < 4; j++) {
-            for (int k = 0; k < 3; k++) q += vertices(tets(i, j), k);
+            for (int k = 0; k < 3; k++) q[k] += vertices(tets(i, j), k);
         }
         q /= 4.;
         // Integrate contributions.
@@ -142,7 +187,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(PointPositionNormalGeometry&
             Vector3 p = pointGeom.positions[pIdx];
             Vector3 n = pointGeom.normals[pIdx];
             double r = (p - q).norm();
-            X += std::exp(-lambda * r) / r * n * pointGeom->tuftedGeom->vertexDualAreas[pIdx];
+            X += std::exp(-lambda * r) / r * n * pointGeom.tuftedGeom->vertexDualAreas[pIdx];
         }
         X /= X.norm();
         for (int j = 0; j < 3; j++) Yt(i, j) = X[j];
@@ -158,7 +203,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(PointPositionNormalGeometry&
     double shift = 0.;
     double totalArea = 0;
     for (size_t pIdx = 0; pIdx < P; pIdx++) {
-        double A = pointGeom->tuftedGeom->vertexDualAreas[pIdx];
+        double A = pointGeom.tuftedGeom->vertexDualAreas[pIdx];
         shift += A * phi[pIdx];
         totalArea += A;
     }
@@ -167,41 +212,10 @@ Vector<double> SignedHeatTetSolver::computeDistance(PointPositionNormalGeometry&
 
     if (VERBOSE) std::cerr << "\tCompleted" << std::endl;
 
-    pointGeom->tuftedGeom->unrequireVertexDualAreas();
-    pointGeom->unrequireTuftedTriangulation();
+    pointGeom.tuftedGeom->unrequireVertexDualAreas();
+    pointGeom.unrequireTuftedTriangulation();
 
     return phi;
-}
-
-void SignedHeatTetSolver::buildTetMesh(const SignedHeat3DOptions& options, bool pointCloud) {
-
-    if (options.rebuild) {
-        double meanFaceArea = 0.;
-        SurfaceMesh& mesh = geometry.mesh;
-        geometry.requireFaceAreas();
-        for (Face f : mesh.faces()) meanFaceArea += geometry.faceAreas[f];
-        meanFaceArea /= mesh.nFaces();
-        geometry.unrequireFaceAreas();
-        double areaScale = std::pow(10, -options.hCoef);
-        TETFLAGS = TET_PREFIX + std::to_string(areaScale * meanFaceArea);
-        TETFLAGS_PRESERVE = TET_PREFIX + std::to_string(areaScale * meanFaceArea) + "Y";
-        if (pointCloud) {
-            tetmeshPointCloud(geometry);
-        } else {
-            tetmeshDomain(geometry);
-        }
-        // With direct convolution in R^3, it's not clear what we should pick as our timestep. Just use the
-        // tetmesh/trimesh as a proxy.
-        meanNodeSpacing = computeMeanNodeSpacing();
-        shortTime = options.tCoef * meanNodeSpacing * meanNodeSpacing;
-        tetVolumes = computeTetVolumes();
-        laplaceMat = buildCrouzeixRaviartLaplacian();
-        massMat = buildCrouzeixRaviartMassMatrix();
-        avgMat = buildAveragingMatrix();
-        poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
-        projectionSolver.reset(new SquareSolver<double>(avgMat.transpose() * massMat * avgMat));
-        if (VERBOSE) std::cerr << "Tet mesh rebuilt" << std::endl;
-    }
 }
 
 /*
@@ -292,9 +306,9 @@ SparseMatrix<double> SignedHeatTetSolver::buildAveragingMatrix() const {
     return A;
 }
 
-void SignedHeatTetSolver::extractIsosurface(std::unique_ptr<SurfaceMesh>& isoMesh,
-                                            std::unique_ptr<VertexPositionGeometry>& isoGeom, const Vector<double>& phi,
-                                            double isoval) const {
+void SignedHeatTetSolver::isosurface(std::unique_ptr<SurfaceMesh>& isoMesh,
+                                     std::unique_ptr<VertexPositionGeometry>& isoGeom, const Vector<double>& phi,
+                                     double isoval) const {
 
     Eigen::MatrixXd SV;
     Eigen::MatrixXi SF;
@@ -497,7 +511,7 @@ void SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry) {
     polyscope::VolumeMesh* psVolumeMesh = polyscope::registerTetMesh("tet mesh", vertices, tets);
 }
 
-void SignedHeatTetSolver::tetmeshPointCloud(PointPositionGeometry& pointGeom) {
+void SignedHeatTetSolver::tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom) {
 
     // First Delaunay triangulate the surface of the bounding cube.
     tetgenio cubeSurface;
@@ -518,7 +532,7 @@ void SignedHeatTetSolver::tetmeshPointCloud(PointPositionGeometry& pointGeom) {
     in.pointmarkerlist = new int[in.numberofpoints];
     // Copy nodes from the input surface mesh.
     for (size_t i = 0; i < pointGeom.cloud.nPoints(); i++) {
-        Vector3 pos = pointGeom.positions()[i];
+        Vector3 pos = pointGeom.positions[i];
         in.pointmarkerlist[i] = 1;
         for (int j = 0; j < 3; j++) {
             in.pointlist[3 * i + j] = pos[j];
@@ -723,7 +737,7 @@ std::vector<Vector3> SignedHeatTetSolver::buildCubeAroundSurface(const Vector3& 
     return cubeCorners;
 }
 
-void SignedHeatTetSolver::getTetmeshData(tetgenio& out, bool pointCloud) {
+void SignedHeatTetSolver::getTetmeshData(tetgenio& out) {
 
     nVertices = out.numberofpoints;
     nTets = out.numberoftetrahedra;
@@ -853,18 +867,18 @@ double SignedHeatTetSolver::radius(VertexPositionGeometry& geometry, const Vecto
     return r;
 }
 
-Vector3 SignedHeatTetSolver::centroid(PointPositionGeometry& pointGeom) const {
+Vector3 SignedHeatTetSolver::centroid(pointcloud::PointPositionGeometry& pointGeom) const {
 
     Vector3 c = {0, 0, 0};
     size_t nPoints = pointGeom.cloud.nPoints();
     for (size_t i = 0; i < nPoints; i++) {
         c += pointGeom.positions[nPoints];
     }
-    c /= mesh.nVertices();
+    c /= nPoints;
     return c;
 }
 
-double SignedHeatTetSolver::radius(PointPositionGeometry& pointGeom, const Vector3& c) const {
+double SignedHeatTetSolver::radius(pointcloud::PointPositionGeometry& pointGeom, const Vector3& c) const {
 
     double r = 0;
     size_t nPoints = pointGeom.cloud.nPoints();

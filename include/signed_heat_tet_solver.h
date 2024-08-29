@@ -3,6 +3,7 @@
 #include "geometrycentral/numerical/linear_solvers.h"
 #include "geometrycentral/pointcloud/point_position_normal_geometry.h"
 #include "geometrycentral/surface/surface_mesh.h"
+#include "geometrycentral/surface/surface_mesh_factories.h"
 #include "geometrycentral/surface/vertex_position_geometry.h"
 
 #include "polyscope/volume_mesh.h"
@@ -10,10 +11,10 @@
 #include "signed_heat_3d.h"
 #include <igl/marching_tets.h>
 
+#include <queue>
+
 #define TETLIBRARY
 #include "tetgen.h"
-
-#include <queue>
 
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
@@ -26,19 +27,17 @@ class SignedHeatTetSolver {
     Vector<double> computeDistance(VertexPositionGeometry& geometry,
                                    const SignedHeat3DOptions& options = SignedHeat3DOptions());
 
-    Vector<double> computeDistance(PointPositionGeometry& pointGeom,
+    Vector<double> computeDistance(pointcloud::PointPositionNormalGeometry& pointGeom,
                                    const SignedHeat3DOptions& options = SignedHeat3DOptions());
 
-    void extractIsosurface(std::unique_ptr<SurfaceMesh>& isoMesh, std::unique_ptr<VertexPositionGeometry>& isoGeom,
-                           const Vector<double>& phi, double isoval = 0.) const;
+    void isosurface(std::unique_ptr<SurfaceMesh>& isoMesh, std::unique_ptr<VertexPositionGeometry>& isoGeom,
+                    const Vector<double>& phi, double isoval = 0.) const;
+
+    bool VERBOSE = true;
 
   private:
     // == mesh encoding input surface
     std::vector<int> surfaceFaces; // indexes into faces of tetmesh; sign indicates relative orientation
-
-    std::unique_ptr<pointcloud::PointCloud> cloud;
-    std::unique_ptr<pointcloud::PointPositionNormalGeometry> pointGeom;
-    polyscope::PointCloud* psCloud;
 
     // == tetmesh quantities
     Eigen::MatrixXd vertices; // vertex positions
@@ -54,7 +53,6 @@ class SignedHeatTetSolver {
 
     double meanNodeSpacing;
     double shortTime;
-    bool VERBOSE = true;
 
     // == solvers
     SparseMatrix<double> laplaceMat, massMat, avgMat;
@@ -62,8 +60,6 @@ class SignedHeatTetSolver {
     std::unique_ptr<SquareSolver<double>> projectionSolver;
 
     // == algorithm
-    Vector<double> computeDistance(VertexPositionGeometry& geometry, const SignedHeat3DOptions& options);
-    Vector<double> computeDistance(PointPositionNormalGeometry& pointGeom, const SignedHeat3DOptions& options);
     SparseMatrix<double> buildCrouzeixRaviartLaplacian() const;
     SparseMatrix<double> buildCrouzeixRaviartMassMatrix() const;
     Vector<double> faceDivergence(const Eigen::MatrixXd& X) const;
@@ -82,15 +78,14 @@ class SignedHeatTetSolver {
     //== tet-meshing
     std::string TET_PREFIX = "pq1.414zfenna"; // need -f, -e to output all faces, edges in tetmesh; -nn for adjacency
     std::string TETFLAGS, TETFLAGS_PRESERVE;
-    void buildTetMesh(const SignedHeat3DOptions& options, bool pointCloud);
     void tetmeshDomain(VertexPositionGeometry& geometry);
-    void tetmeshPointCloud(PointPositionGeometry& pointGeom);
+    void tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom);
     void triangulateCube(tetgenio& cubeSurface, const Vector3& centroid, const double& radius, double scale = 2) const;
     std::vector<Vector3> buildCubeAroundSurface(const Vector3& centroid, const double& radius, double scale) const;
     void getTetmeshData(tetgenio& out);
     double computeMeanNodeSpacing() const;
     Vector3 centroid(VertexPositionGeometry& geometry) const;
-    Vector3 centroid(PointPositionGeometry& pointGeom) const;
+    Vector3 centroid(pointcloud::PointPositionGeometry& pointGeom) const;
     double radius(VertexPositionGeometry& geometry, const Vector3& centroid) const;
-    double radius(PointPositionGeometry& pointGeom, const Vector3& c) const;
+    double radius(pointcloud::PointPositionGeometry& pointGeom, const Vector3& c) const;
 };

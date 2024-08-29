@@ -7,7 +7,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     // TODO
 }
 
-Vector<double> SignedHeatGridSolver::computeDistance(PointPositionNormalGeometry& pointGeom,
+Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNormalGeometry& pointGeom,
                                                      const SignedHeat3DOptions& options) {
     // TODO
 }
