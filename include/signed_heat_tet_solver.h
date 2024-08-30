@@ -1,10 +1,7 @@
 #pragma once
 
 #include "geometrycentral/numerical/linear_solvers.h"
-#include "geometrycentral/pointcloud/point_position_normal_geometry.h"
-#include "geometrycentral/surface/surface_mesh.h"
 #include "geometrycentral/surface/surface_mesh_factories.h"
-#include "geometrycentral/surface/vertex_position_geometry.h"
 
 #include "polyscope/volume_mesh.h"
 
@@ -84,8 +81,4 @@ class SignedHeatTetSolver {
     std::vector<Vector3> buildCubeAroundSurface(const Vector3& centroid, const double& radius, double scale) const;
     void getTetmeshData(tetgenio& out);
     double computeMeanNodeSpacing() const;
-    Vector3 centroid(VertexPositionGeometry& geometry) const;
-    Vector3 centroid(pointcloud::PointPositionGeometry& pointGeom) const;
-    double radius(VertexPositionGeometry& geometry, const Vector3& centroid) const;
-    double radius(pointcloud::PointPositionGeometry& pointGeom, const Vector3& c) const;
 };

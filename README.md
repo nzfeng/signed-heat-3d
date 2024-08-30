@@ -62,7 +62,7 @@ In addition to the mesh file, you can pass several arguments to the command line
 | ------------- |-------------|
 |`--g`, `--grid`| Solve on a background grid. By default, the domain will be discretized as a tet mesh. |
 |`--V`, `--verbose`| Verbose output. On by default|
-|`--h`| Controls the tet/grid spacing, with larger values indicating more refinement. Default value is 1.|
+|`--h`| Controls the tet/grid spacing proportional to $10^{-h}$, with larger values indicating more refinement. Default value is 0.|
 |`--help`| Display help. |
 
 This program lets you solve for distance on either a tet-meshed domain, or a background (uniform) grid. The tetmesh option in particular generates a _conforming_ tetmesh to an input triangle mesh. If your source geometry isn't a triangle mesh (e.g. polygon mesh or point cloud), consider using the grid option.

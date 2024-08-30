@@ -7,6 +7,7 @@
 #include "polyscope/point_cloud.h"
 #include "polyscope/polyscope.h"
 #include "polyscope/surface_mesh.h"
+#include "polyscope/volume_grid.h"
 #include "polyscope/volume_mesh.h"
 
 #include "signed_heat_grid_solver.h"
@@ -29,7 +30,6 @@ std::unique_ptr<SurfaceMesh> mesh;
 std::unique_ptr<VertexPositionGeometry> geometry;
 std::unique_ptr<pointcloud::PointCloud> cloud;
 std::unique_ptr<pointcloud::PointPositionNormalGeometry> pointGeom;
-polyscope::PointCloud* psCloud;
 
 // Contouring
 float ISOVAL = 0.;
@@ -39,14 +39,13 @@ std::unique_ptr<VertexPositionGeometry> isoGeom;
 
 // Polyscope data
 polyscope::SurfaceMesh* psMesh;
-
-// Tet mesh data
-Eigen::MatrixXd VERTICES;
-Eigen::MatrixXi TETS, FACES, EDGES;
+polyscope::PointCloud* psCloud;
+polyscope::VolumeGridNodeScalarQuantity* gridScalarQ;
+polyscope::SlicePlane* psPlane;
 
 // Solvers & parameters
 float TCOEF = 1.0;
-float HCOEF = 1.0;
+float HCOEF = 0.0;
 std::unique_ptr<SignedHeatTetSolver> tetSolver;
 std::unique_ptr<SignedHeatGridSolver> gridSolver;
 SignedHeat3DOptions SHM_OPTIONS;
@@ -54,27 +53,42 @@ int CONSTRAINT_MODE = static_cast<int>(LevelSetConstraint::ZeroSet);
 
 // Program variables
 enum MeshMode { Tet = 0, Grid };
+enum InputMode { Mesh = 0, Points };
 int MESH_MODE = MeshMode::Tet;
+int INPUT_MODE = InputMode::Mesh;
 std::string MESHNAME = "input mesh";
 std::string OUTPUT_DIR = "../export";
 std::string OUTPUT_FILENAME;
 int LAST_SOLVER_MODE;
+bool FAST_INTEGRATE = false;
 bool VERBOSE = true;
 
 void solve() {
+
+    SHM_OPTIONS.levelSetConstraint = static_cast<LevelSetConstraint>(CONSTRAINT_MODE);
+    SHM_OPTIONS.tCoef = TCOEF;
+    SHM_OPTIONS.hCoef = HCOEF;
     if (MESH_MODE == MeshMode::Tet) {
-        SHM_OPTIONS.levelSetConstraint = static_cast<LevelSetConstraint>(CONSTRAINT_MODE);
-        SHM_OPTIONS.tCoef = TCOEF;
-        SHM_OPTIONS.hCoef = HCOEF;
-        PHI = tetSolver->computeDistance(*geometry, SHM_OPTIONS);
-        polyscope::getVolumeMesh("tet mesh")
+        PHI = (INPUT_MODE == InputMode::Mesh) ? tetSolver->computeDistance(*geometry, SHM_OPTIONS)
+                                              : tetSolver->computeDistance(*pointGeom, SHM_OPTIONS);
+        polyscope::getVolumeMesh("domain")
             ->addVertexScalarQuantity("GSD", PHI)
             ->setIsolinesEnabled(true)
             ->setEnabled(true);
-        SHM_OPTIONS.rebuild = false;
-    } else if (MeshMode::Tet == MeshMode::Grid) {
+        polyscope::getVolumeMesh("domain")->setCullWholeElements(false);
+    } else if (MESH_MODE == MeshMode::Grid) {
+        PHI = (INPUT_MODE == InputMode::Mesh) ? gridSolver->computeDistance(*geometry, SHM_OPTIONS)
+                                              : gridSolver->computeDistance(*pointGeom, SHM_OPTIONS);
+        gridScalarQ = polyscope::getVolumeGrid("domain")->addNodeScalarQuantity("GSD", PHI)->setIsolinesEnabled(true);
+        gridScalarQ->setEnabled(true);
     }
+    psPlane = polyscope::addSceneSlicePlane();
+    psPlane->setDrawPlane(true);
+    psPlane->setDrawWidget(true);
+    psPlane->setVolumeMeshToInspect("domain");
+    psMesh->setIgnoreSlicePlane(psPlane->name, true);
     LAST_SOLVER_MODE = MESH_MODE;
+    SHM_OPTIONS.rebuild = false;
 }
 
 void callback() {
@@ -82,31 +96,82 @@ void callback() {
     if (ImGui::Button("Solve")) {
         solve();
     }
+    ImGui::RadioButton("on tet mesh", &MESH_MODE, MeshMode::Tet);
+    ImGui::RadioButton("on grid", &MESH_MODE, MeshMode::Grid);
+
+    ImGui::Separator();
+    ImGui::Text("Solve options");
+    ImGui::Separator();
     ImGui::RadioButton("Constrain zero set", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::ZeroSet));
     ImGui::RadioButton("Constrain multiple levelsets", &CONSTRAINT_MODE,
                        static_cast<int>(LevelSetConstraint::Multiple));
     ImGui::RadioButton("No levelset constraints", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::None));
 
-    ImGui::InputFloat("tCoef", &TCOEF);
+    ImGui::InputFloat("tCoef (diffusion time)", &TCOEF);
     if (ImGui::InputFloat("hCoef (mesh spacing)", &HCOEF)) {
         SHM_OPTIONS.rebuild = true;
     }
 
-    // Contouring
-    if (ImGui::InputFloat("Isovalue (enter value)", &ISOVAL)) {
-        if (LAST_SOLVER_MODE == MeshMode::Tet) {
-            tetSolver->isosurface(isoMesh, isoGeom, PHI, ISOVAL);
+    if (PHI.size() > 0) {
+        ImGui::Separator();
+        ImGui::Text("Contour options");
+        ImGui::Separator();
+        if (ImGui::SliderFloat("Contour (drag slider)", &ISOVAL, PHI.minCoeff(), PHI.maxCoeff())) {
+            if (LAST_SOLVER_MODE == MeshMode::Tet) {
+                tetSolver->isosurface(isoMesh, isoGeom, PHI, ISOVAL);
+                polyscope::registerSurfaceMesh("isosurface", isoGeom->vertexPositions, isoMesh->getFaceVertexList());
+            } else {
+                gridScalarQ->setIsosurfaceLevel(ISOVAL);
+                gridScalarQ->setIsosurfaceVizEnabled(true);
+                polyscope::SlicePlane* p = polyscope::addSceneSlicePlane();
+                gridScalarQ->setSlicePlanesAffectIsosurface(false);
+                gridScalarQ->registerIsosurfaceAsMesh("isosurface");
+            }
+            polyscope::getSurfaceMesh("isosurface")->setIgnoreSlicePlane(psPlane->name, true);
         }
-        polyscope::registerSurfaceMesh("isosurface", isoGeom->vertexPositions, isoMesh->getFaceVertexList());
-    }
-    if (ImGui::SliderFloat("Contour (drag slider)", &ISOVAL, PHI.minCoeff(), PHI.maxCoeff())) {
-        if (LAST_SOLVER_MODE == MeshMode::Tet) {
-            tetSolver->isosurface(isoMesh, isoGeom, PHI, ISOVAL);
+        if (ImGui::Button("Export isosurface")) {
+            if (LAST_SOLVER_MODE == MeshMode::Grid) {
+                // register geometry-central mesh from Polyscope one
+                polyscope::SurfaceMesh* psIsoMesh = polyscope::getSurfaceMesh("isosurface");
+                std::vector<std::vector<size_t>> polygons;
+                std::vector<Vector3> positions;
+                for (size_t i = 0; i < psIsoMesh->nFacesTriangulation(); i++) {
+                    std::vector<size_t> face;
+                    for (int j = 0; j < 3; j++) face[j] = psIsoMesh->triangleFaceInds.getValue(3 * i + j);
+                    polygons.push_back(face);
+                }
+                for (size_t i = 0; i < psIsoMesh->nVertices(); i++) {
+                    Vector3 p;
+                    for (int j = 0; j < 3; j++) p[j] = psIsoMesh->vertexPositions.getValue(i)[j];
+                    positions.push_back(p);
+                }
+                std::tie(isoMesh, isoGeom) = makeSurfaceMeshAndGeometry(polygons, positions);
+            }
+            std::string isoFilename = OUTPUT_DIR + "/isosurface.obj";
+            writeSurfaceMesh(*isoMesh, *isoGeom, isoFilename);
+            std::cerr << "Isosurface written to " << isoFilename << std::endl;
         }
-        polyscope::registerSurfaceMesh("isosurface", isoGeom->vertexPositions, isoMesh->getFaceVertexList());
     }
-    if (ImGui::Button("Export isosurface")) {
-        writeSurfaceMesh(*isoMesh, *isoGeom, OUTPUT_DIR + "/isosurface.obj");
+}
+
+void savePointCloud(const std::string& filename) {
+
+    std::fstream f;
+    f.open(filename, std::ios::out | std::ios::trunc);
+
+    if (f.is_open()) {
+        geometry->requireVertexNormals();
+        for (Vertex v : mesh->vertices()) {
+            Vector3 pos = geometry->vertexPositions[v];
+            Vector3 n = geometry->vertexNormals[v];
+            f << "v " << pos[0] << " " << pos[1] << " " << pos[2] << "\n";
+            f << "vn " << n[0] << " " << n[1] << " " << n[2] << "\n";
+        }
+        geometry->unrequireVertexNormals();
+        f.close();
+        std::cerr << "File " << filename << " written succesfully." << std::endl;
+    } else {
+        std::cerr << "Could not save '" << filename << "'!" << std::endl;
     }
 }
 
@@ -188,6 +253,7 @@ int main(int argc, char** argv) {
         } else {
             psMesh->setAllPermutations(polyscopePermutations(*mesh));
         }
+        INPUT_MODE = InputMode::Mesh;
     } else {
         std::vector<Vector3> positions, normals;
         std::tie(positions, normals) = readPointCloud(meshFilepath);
@@ -202,11 +268,14 @@ int main(int argc, char** argv) {
         pointGeom = std::unique_ptr<pointcloud::PointPositionNormalGeometry>(
             new pointcloud::PointPositionNormalGeometry(*cloud, pointPositions, pointNormals));
         psCloud = polyscope::registerPointCloud("point cloud", pointPositions);
+        INPUT_MODE = InputMode::Points;
     }
     tetSolver = std::unique_ptr<SignedHeatTetSolver>(new SignedHeatTetSolver());
     gridSolver = std::unique_ptr<SignedHeatGridSolver>(new SignedHeatGridSolver());
     tetSolver->VERBOSE = verbose;
     gridSolver->VERBOSE = verbose;
+
+    savePointCloud("../data/mesh.pc");
 
     polyscope::show();
 

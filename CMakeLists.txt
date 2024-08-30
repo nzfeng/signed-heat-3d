@@ -80,6 +80,7 @@ add_subdirectory(deps/tetgen)
 set(SRCS
   src/signed_heat_tet_solver.cpp
   src/signed_heat_grid_solver.cpp
+  src/signed_heat_3d.cpp
   src/main.cpp
 )
 
