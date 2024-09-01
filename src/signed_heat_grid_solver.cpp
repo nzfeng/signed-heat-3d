@@ -14,10 +14,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         double r = radius(geometry, c);
         double s = r * options.scale;
         // clang-format off
-       // c = {1,0,0};
         bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
         bboxMin += c; bboxMax += c;
-        glm::uvec3 boundMin, boundMax;
+        glm::vec3 boundMin, boundMax;
         for (int i = 0; i < 3; i++) {
             boundMin[i] = bboxMin[i];
             boundMax[i] = bboxMax[i];
@@ -27,6 +26,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         cellSize = 2. * s / nx;
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
         laplaceMat = laplacian();
+        if (VERBOSE) std::cerr << "Factorizing Laplacian..." << std::endl;
         poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
         if (VERBOSE) std::cerr << "Matrices factorized." << std::endl;
         t2 = high_resolution_clock::now();
@@ -43,20 +43,24 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     shortTime = options.tCoef * h * h;
     double lambda = std::sqrt(1. / shortTime);
     size_t totalNodes = nx * ny * nz;
-    Eigen::MatrixXd Y = Eigen::MatrixXd::Zero(totalNodes, 3);
+    Eigen::VectorXd Y = Eigen::VectorXd::Zero(3 * totalNodes);
     setFaceVectorAreas(geometry);
-    for (Face f : mesh.faces()) {
-        Vector3 N = faceNormals[f];
-        Vector3 y = barycenter(geometry, f);
-        double A = faceAreas[f];
-        for (size_t k = 0; k < nz; k++) {
-            for (size_t j = 0; j < ny; j++) {
-                for (size_t i = 0; i < nx; i++) {
-                    size_t idx = indicesToNodeIndex(i, j, k);
-                    Vector3 x = indicesToNodePosition(i, j, k);
+
+    for (size_t k = 0; k < nz; k++) {
+        for (size_t j = 0; j < ny; j++) {
+            for (size_t i = 0; i < nx; i++) {
+                size_t idx = indicesToNodeIndex(i, j, k);
+                Vector3 x = indicesToNodePosition(i, j, k);
+                for (Face f : mesh.faces()) {
+                    Vector3 N = faceNormals[f];
+                    Vector3 y = barycenter(geometry, f);
+                    double A = faceAreas[f];
                     Vector3 source = N * A * yukawaPotential(x, y, lambda);
-                    for (int p = 0; p < 3; p++) Y(idx, p) += source[p];
+                    for (int p = 0; p < 3; p++) Y(3 * idx + p) += source[p];
                 }
+                Vector3 X = {Y(3 * idx + 0), Y(3 * idx + 1), Y(3 * idx + 2)};
+                X /= X.norm();
+                for (int p = 0; p < 3; p++) Y(3 * idx + p) = X[p];
             }
         }
     }
@@ -64,11 +68,12 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
     // Integrate gradient to get distance.
+    // TODO: distances seem divided by a factor of 2
     if (VERBOSE) std::cerr << "Step 3..." << std::endl;
     SparseMatrix<double> D = gradient(); // 3N x N
     Vector<double> divYt = D.transpose() * Y;
     // No level set constraints implemented for grid.
-    Vector<double> phi = options.fastIntegration ? integrateGreedily(Y) : poissonSolver->solve(divYt);
+    Vector<double> phi = options.fastIntegration ? integrateGreedily(Y) : -poissonSolver->solve(divYt);
     double shift = evaluateAverageAlongSourceGeometry(geometry, phi);
     phi -= shift * Vector<double>::Ones(totalNodes);
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
@@ -86,22 +91,21 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         Vector3 c = centroid(pointGeom);
         double r = radius(pointGeom, c);
         double s = r * options.scale;
-        bboxMin = {-s, -s, -s};
-        bboxMax = {s, s, s};
-        bboxMin += c;
-        bboxMax += c;
-        glm::uvec3 boundMin, boundMax;
+        // clang-format off
+        bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
+        bboxMin += c; bboxMax += c;
+        std::cerr << bboxMin << " " << bboxMax <<std::endl;
+        glm::vec3 boundMin, boundMax;
         for (int i = 0; i < 3; i++) {
             boundMin[i] = bboxMin[i];
             boundMax[i] = bboxMax[i];
         }
-        nx = 2 * std::pow(10, options.hCoef + 1);
-        ny = nx;
-        nz = nx;
+        nx = 2 * std::pow(10, options.hCoef + 1); ny = nx; nz = nx;
         // clang-format on
         cellSize = 2. * s / nx;
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
         laplaceMat = laplacian();
+        if (VERBOSE) std::cerr << "Factorizing Laplacian..." << std::endl;
         poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
         if (VERBOSE) std::cerr << "Matrices factorized." << std::endl;
         t2 = high_resolution_clock::now();
@@ -113,28 +117,33 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
     // With direct convolution in R^n, it's not clear what we should pick as our timestep. Use the
     // input mesh as a heuristic.
+    pointGeom.requireTuftedTriangulation();
+    pointGeom.tuftedGeom->requireVertexDualAreas();
     double h = meanEdgeLength(*(pointGeom.tuftedGeom));
     shortTime = options.tCoef * h * h;
     double lambda = std::sqrt(1. / shortTime);
     size_t totalNodes = nx * ny * nz;
-    Eigen::MatrixXd Y = Eigen::MatrixXd::Zero(totalNodes, 3);
+    Eigen::VectorXd Y = Eigen::VectorXd::Zero(3 * totalNodes);
     size_t P = pointGeom.cloud.nPoints();
-    for (size_t i = 0; i < P; i++) {
-        Vector3 x = pointGeom.positions[i];
-        Vector3 n = pointGeom.normals[i];
-        double A = pointGeom.tuftedGeom->vertexDualAreas[i];
-        for (size_t k = 0; k < nz; k++) {
-            for (size_t j = 0; j < ny; j++) {
-                for (size_t i = 0; i < nx; i++) {
-                    size_t idx = indicesToNodeIndex(i, j, k);
-                    Vector3 y = indicesToNodePosition(i, j, k);
+
+    for (size_t k = 0; k < nz; k++) {
+        for (size_t j = 0; j < ny; j++) {
+            for (size_t i = 0; i < nx; i++) {
+                size_t idx = indicesToNodeIndex(i, j, k);
+                Vector3 y = indicesToNodePosition(i, j, k);
+                for (size_t pIdx = 0; pIdx < P; pIdx++) {
+                    Vector3 x = pointGeom.positions[pIdx];
+                    Vector3 n = pointGeom.normals[pIdx];
+                    double A = pointGeom.tuftedGeom->vertexDualAreas[pIdx];
                     Vector3 source = n * A * yukawaPotential(x, y, lambda);
-                    for (int p = 0; p < 3; p++) Y(idx, p) += source[p];
+                    for (int p = 0; p < 3; p++) Y(3 * idx + p) += source[p];
                 }
+                Vector3 X = {Y(3 * idx + 0), Y(3 * idx + 1), Y(3 * idx + 2)};
+                X /= X.norm();
+                for (int p = 0; p < 3; p++) Y(3 * idx + p) = X[p];
             }
         }
     }
-    for (size_t i = 0; i < totalNodes; i++) Y.row(i) /= Y.row(i).norm();
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
     // Integrate gradient to get distance.
@@ -142,14 +151,16 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
     SparseMatrix<double> D = gradient(); // 3N x N
     Vector<double> divYt = D.transpose() * Y;
     // No level set constraints implemented for grid.
-    Vector<double> phi = options.fastIntegration ? integrateGreedily(Y) : poissonSolver->solve(divYt);
+    Vector<double> phi = options.fastIntegration ? integrateGreedily(Y) : -poissonSolver->solve(divYt);
     double shift = evaluateAverageAlongSourceGeometry(pointGeom, phi);
     phi -= shift * Vector<double>::Ones(totalNodes);
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
+    pointGeom.unrequireTuftedTriangulation();
+    pointGeom.tuftedGeom->unrequireVertexDualAreas();
     return phi;
 }
 
-Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::MatrixXd& Yt) {
+Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::VectorXd& Yt) {
 
     Vector<double> phi = Vector<double>::Zero(nx * ny * nz);
     Vector<bool> visited = Vector<bool>::Zero(nx * ny * nz);
@@ -162,6 +173,7 @@ Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::MatrixXd& Yt
         curr = queue.front();
         Vector3 p = indicesToNodePosition(curr[0], curr[1], curr[2]);
         size_t currIdx = indicesToNodeIndex(curr[0], curr[1], curr[2]);
+        Eigen::Vector3d Yp = {Yt(3 * currIdx), Yt(3 * currIdx + 1), Yt(3 * currIdx + 2)};
         queue.pop();
         for (int i = 0; i < 3; i++) {
             if (curr[i] < dims[i] - 1 || curr[i] > 0) {
@@ -171,7 +183,8 @@ Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::MatrixXd& Yt
                 if (visited[nextIdx]) continue;
                 Vector3 q = indicesToNodePosition(next[0], next[1], next[2]);
                 Vector3 edge = q - p;
-                Eigen::Vector3d Y_avg = 0.5 * (Yt.row(currIdx) + Yt.row(nextIdx));
+                Eigen::Vector3d Yq = {Yt(3 * nextIdx), Yt(3 * nextIdx + 1), Yt(3 * nextIdx + 2)};
+                Eigen::Vector3d Y_avg = 0.5 * (Yq + Yp);
                 Vector3 Y = {Y_avg[0], Y_avg[1], Y_avg[2]};
                 phi[nextIdx] = phi[currIdx] + dot(Y, edge);
                 visited[nextIdx] = true;

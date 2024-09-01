@@ -69,7 +69,7 @@ void solve() {
     SHM_OPTIONS.levelSetConstraint = static_cast<LevelSetConstraint>(CONSTRAINT_MODE);
     SHM_OPTIONS.tCoef = TCOEF;
     SHM_OPTIONS.hCoef = HCOEF;
-    std::string cmapName = (SHM_OPTIONS.levelSetConstraint == LevelSetConstraint::Multiple) ? "viridis" : "coolwarm";
+    std::string cmapName = "viridis";
     if (MESH_MODE == MeshMode::Tet) {
         if (VERBOSE) std::cerr << "\nSolving on tet mesh..." << std::endl;
         t1 = high_resolution_clock::now();

@@ -35,7 +35,7 @@ class SignedHeatGridSolver {
 
     SparseMatrix<double> laplacian() const;
     SparseMatrix<double> gradient() const;
-    Vector<double> integrateGreedily(const Eigen::MatrixXd& Yt);
+    Vector<double> integrateGreedily(const Eigen::VectorXd& Yt);
     double evaluateFunction(const Vector<double>& u, const Vector3& q) const;
     double evaluateAverageAlongSourceGeometry(VertexPositionGeometry& geometry, const Vector<double>& u) const;
     double evaluateAverageAlongSourceGeometry(pointcloud::PointPositionGeometry& pointGeom,
