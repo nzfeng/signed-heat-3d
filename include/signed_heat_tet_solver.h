@@ -8,7 +8,7 @@
 #include "signed_heat_3d.h"
 #include <igl/marching_tets.h>
 
-#include <queue>
+#include <set>
 
 #define TETLIBRARY
 #include "tetgen.h"
@@ -40,29 +40,41 @@ class SignedHeatTetSolver {
     Eigen::MatrixXd vertices; // vertex positions
     Eigen::MatrixXi tets;     // tetrahedra -- each row is vertex indices
     Eigen::MatrixXi faces;    // faces -- each row is vertex indices
-    Eigen::MatrixXi edges;    // edges -- each row is vertex indices
     size_t nVertices, nTets, nFaces, nEdges;
 
     Eigen::VectorXd faceAreas, tetVolumes, vertexDualVolumes;
-    Eigen::MatrixXi tetFace;    // (nTets x 4) tet-face (signed) adjacency
-    Eigen::MatrixXi faceTet;    // (nFaces x 2) tet-face adjacency (interior tet 1st, -1 if no neighboring tet)
-    Eigen::MatrixXi edgeVertex; // (nEdges x 2) edge-vertex (signed) adjacency
+    Eigen::MatrixXi tetFace; // (nTets x 4) tet-face (signed) adjacency
+    std::vector<std::set<size_t>> vertexTet;
 
     double meanNodeSpacing;
     double shortTime;
 
     // == solvers
-    SparseMatrix<double> laplaceMat, massMat, avgMat;
+    SparseMatrix<double> laplaceMat, massMat, avgMat, dualLaplace;
     std::unique_ptr<PositiveDefiniteSolver<double>> poissonSolver;
     std::unique_ptr<SquareSolver<double>> projectionSolver;
 
     // == algorithm
+    Vector<double> integrateVectorField(VertexPositionGeometry& geometry, const Eigen::MatrixXd& Yt,
+                                        const SignedHeat3DOptions& options);
+    Vector<double> integrateVectorField(pointcloud::PointPositionNormalGeometry& pointGeom, const Eigen::MatrixXd& Yt,
+                                        const SignedHeat3DOptions& options);
+    Vector<double> integrateVectorFieldGreedily(VertexPositionGeometry& geometry, const Eigen::MatrixXd& Yt,
+                                                const SignedHeat3DOptions& options);
+    Vector<double> integrateVectorFieldGreedily(pointcloud::PointPositionNormalGeometry& pointGeom,
+                                                const Eigen::MatrixXd& Yt, const SignedHeat3DOptions& options);
+    void integrateGreedily(const Eigen::MatrixXd& Yt, Vector<bool>& visited, Vector<double>& phi) const;
+    Vector<double> integrateGreedilyMultipleLevelSets(IntrinsicGeometryInterface& geometry,
+                                                      const Eigen::MatrixXd& Yt) const;
     SparseMatrix<double> buildCrouzeixRaviartLaplacian() const;
     SparseMatrix<double> buildCrouzeixRaviartMassMatrix() const;
+    SparseMatrix<double> dualLaplacian() const;
     Vector<double> faceDivergence(const Eigen::MatrixXd& X) const;
+    Vector<double> vertexDivergence(const Eigen::MatrixXd& X) const;
     Vector<double> projectOntoVertices(const Vector<double>& u) const;
     SparseMatrix<double> buildAveragingMatrix() const;
-    double computeAverageValueOnSource(const Vector<double>& phi) const;
+    double averageValueOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const;
+    double averageValueOnSource(pointcloud::PointPositionGeometry& pointGeom, const Vector<double>& phi) const;
 
     //== tet mesh utilities
     Eigen::VectorXd computeTetVolumes() const;
@@ -77,7 +89,7 @@ class SignedHeatTetSolver {
     std::string TETFLAGS, TETFLAGS_PRESERVE;
     void tetmeshDomain(VertexPositionGeometry& geometry);
     void tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom);
-    void triangulateCube(tetgenio& cubeSurface, const Vector3& centroid, const double& radius, double scale = 2) const;
+    void triangulateCube(tetgenio& cubeSurface, const Vector3& centroid, const double& radius, double scale = 2.) const;
     std::vector<Vector3> buildCubeAroundSurface(const Vector3& centroid, const double& radius, double scale) const;
     void getTetmeshData(tetgenio& out);
     double computeMeanNodeSpacing() const;

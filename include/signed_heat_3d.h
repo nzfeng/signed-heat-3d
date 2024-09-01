@@ -6,6 +6,14 @@
 #include "geometrycentral/surface/surface_mesh.h"
 #include "geometrycentral/surface/vertex_position_geometry.h"
 
+#include <queue>
+
+#include <chrono>
+using std::chrono::duration;
+using std::chrono::duration_cast;
+using std::chrono::high_resolution_clock;
+using std::chrono::milliseconds;
+
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
 
@@ -15,6 +23,7 @@ struct SignedHeat3DOptions {
     double hCoef = 0.0;
     bool rebuild = true;
     double scale = 2.;
+    bool fastIntegration = false;
 };
 
 Vector3 centroid(VertexPositionGeometry& geometry);

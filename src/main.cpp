@@ -21,6 +21,8 @@ using std::chrono::duration;
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
+std::chrono::time_point<high_resolution_clock> t1, t2;
+std::chrono::duration<double, std::milli> ms_fp;
 
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
@@ -60,7 +62,6 @@ std::string MESHNAME = "input mesh";
 std::string OUTPUT_DIR = "../export";
 std::string OUTPUT_FILENAME;
 int LAST_SOLVER_MODE;
-bool FAST_INTEGRATE = false;
 bool VERBOSE = true;
 
 void solve() {
@@ -69,24 +70,42 @@ void solve() {
     SHM_OPTIONS.tCoef = TCOEF;
     SHM_OPTIONS.hCoef = HCOEF;
     if (MESH_MODE == MeshMode::Tet) {
+        if (VERBOSE) std::cerr << "\nSolving on tet mesh..." << std::endl;
+        t1 = high_resolution_clock::now();
         PHI = (INPUT_MODE == InputMode::Mesh) ? tetSolver->computeDistance(*geometry, SHM_OPTIONS)
                                               : tetSolver->computeDistance(*pointGeom, SHM_OPTIONS);
+        t2 = high_resolution_clock::now();
+        ms_fp = t2 - t1;
+        if (VERBOSE) std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
         polyscope::getVolumeMesh("domain")
             ->addVertexScalarQuantity("GSD", PHI)
+            ->setColorMap("coolwarm")
             ->setIsolinesEnabled(true)
             ->setEnabled(true);
         polyscope::getVolumeMesh("domain")->setCullWholeElements(false);
     } else if (MESH_MODE == MeshMode::Grid) {
+        t1 = high_resolution_clock::now();
         PHI = (INPUT_MODE == InputMode::Mesh) ? gridSolver->computeDistance(*geometry, SHM_OPTIONS)
                                               : gridSolver->computeDistance(*pointGeom, SHM_OPTIONS);
-        gridScalarQ = polyscope::getVolumeGrid("domain")->addNodeScalarQuantity("GSD", PHI)->setIsolinesEnabled(true);
+        t2 = high_resolution_clock::now();
+        ms_fp = t2 - t1;
+        if (VERBOSE) std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
+        gridScalarQ = polyscope::getVolumeGrid("domain")
+                          ->addNodeScalarQuantity("GSD", PHI)
+                          ->setColorMap("coolwarm")
+                          ->setIsolinesEnabled(true);
         gridScalarQ->setEnabled(true);
     }
+    polyscope::removeLastSceneSlicePlane();
     psPlane = polyscope::addSceneSlicePlane();
-    psPlane->setDrawPlane(true);
+    psPlane->setDrawPlane(false);
     psPlane->setDrawWidget(true);
-    psPlane->setVolumeMeshToInspect("domain");
-    psMesh->setIgnoreSlicePlane(psPlane->name, true);
+    if (MESH_MODE == MeshMode::Tet) psPlane->setVolumeMeshToInspect("domain");
+    if (INPUT_MODE == InputMode::Mesh) {
+        psMesh->setIgnoreSlicePlane(psPlane->name, true);
+    } else {
+        psCloud->setIgnoreSlicePlane(psPlane->name, true);
+    }
     LAST_SOLVER_MODE = MESH_MODE;
     SHM_OPTIONS.rebuild = false;
 }
@@ -96,20 +115,22 @@ void callback() {
     if (ImGui::Button("Solve")) {
         solve();
     }
-    ImGui::RadioButton("on tet mesh", &MESH_MODE, MeshMode::Tet);
+    if (mesh == nullptr || mesh->isTriangular()) ImGui::RadioButton("on tet mesh", &MESH_MODE, MeshMode::Tet);
     ImGui::RadioButton("on grid", &MESH_MODE, MeshMode::Grid);
 
     ImGui::Separator();
     ImGui::Text("Solve options");
     ImGui::Separator();
-    ImGui::RadioButton("Constrain zero set", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::ZeroSet));
-    ImGui::RadioButton("Constrain multiple levelsets", &CONSTRAINT_MODE,
-                       static_cast<int>(LevelSetConstraint::Multiple));
-    ImGui::RadioButton("No levelset constraints", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::None));
-
+    ImGui::Checkbox("Use fast integration", &SHM_OPTIONS.fastIntegration);
     ImGui::InputFloat("tCoef (diffusion time)", &TCOEF);
     if (ImGui::InputFloat("hCoef (mesh spacing)", &HCOEF)) {
         SHM_OPTIONS.rebuild = true;
+    }
+    if (MESH_MODE != MeshMode::Grid) {
+        ImGui::RadioButton("Constrain zero set", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::ZeroSet));
+        ImGui::RadioButton("Constrain multiple levelsets", &CONSTRAINT_MODE,
+                           static_cast<int>(LevelSetConstraint::Multiple));
+        ImGui::RadioButton("No levelset constraints", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::None));
     }
 
     if (PHI.size() > 0) {
@@ -154,27 +175,6 @@ void callback() {
     }
 }
 
-void savePointCloud(const std::string& filename) {
-
-    std::fstream f;
-    f.open(filename, std::ios::out | std::ios::trunc);
-
-    if (f.is_open()) {
-        geometry->requireVertexNormals();
-        for (Vertex v : mesh->vertices()) {
-            Vector3 pos = geometry->vertexPositions[v];
-            Vector3 n = geometry->vertexNormals[v];
-            f << "v " << pos[0] << " " << pos[1] << " " << pos[2] << "\n";
-            f << "vn " << n[0] << " " << n[1] << " " << n[2] << "\n";
-        }
-        geometry->unrequireVertexNormals();
-        f.close();
-        std::cerr << "File " << filename << " written succesfully." << std::endl;
-    } else {
-        std::cerr << "Could not save '" << filename << "'!" << std::endl;
-    }
-}
-
 std::tuple<std::vector<Vector3>, std::vector<Vector3>> readPointCloud(const std::string& filepath) {
 
     std::ifstream curr_file(filepath.c_str());
@@ -215,6 +215,8 @@ int main(int argc, char** argv) {
 
     args::Group group(parser);
     args::Flag grid(group, "grid", "Solve on a background grid (vs. tet mesh).", {"g", "grid"});
+    args::Flag fast(group, "fast", "Solve using a less accurate, but significantly faster, method of integration.",
+                    {"f", "fast"});
     args::Flag verbose(group, "verbose", "Verbose output", {"V", "verbose"});
 
     // Parse args
@@ -238,6 +240,7 @@ int main(int argc, char** argv) {
     std::string meshFilepath = args::get(meshFilename);
     MESH_MODE = grid ? MeshMode::Grid : MeshMode::Tet;
     OUTPUT_FILENAME = OUTPUT_DIR + "/GSD.obj";
+    SHM_OPTIONS.fastIntegration = fast;
     VERBOSE = verbose;
 
     // Get file extension.
@@ -274,8 +277,6 @@ int main(int argc, char** argv) {
     gridSolver = std::unique_ptr<SignedHeatGridSolver>(new SignedHeatGridSolver());
     tetSolver->VERBOSE = verbose;
     gridSolver->VERBOSE = verbose;
-
-    savePointCloud("../data/mesh.pc");
 
     polyscope::show();
 

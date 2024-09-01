@@ -7,7 +7,11 @@ SignedHeatTetSolver::SignedHeatTetSolver() {}
 Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geometry,
                                                     const SignedHeat3DOptions& options) {
 
-    if (options.rebuild) {
+    if (options.rebuild || poissonSolver == nullptr) {
+        std::chrono::time_point<high_resolution_clock> t1, t2;
+        std::chrono::duration<double, std::milli> ms_fp;
+        t1 = high_resolution_clock::now();
+        if (VERBOSE) std::cerr << "Building tet mesh..." << std::endl;
         double meanFaceArea = 0.;
         SurfaceMesh& mesh = geometry.mesh;
         geometry.requireFaceAreas();
@@ -34,6 +38,9 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
         SparseMatrix<double> P = avgMat.transpose() * massMat * avgMat;
         projectionSolver.reset(new SquareSolver<double>(P));
         if (VERBOSE) std::cerr << "Tet mesh (re)built" << std::endl;
+        t2 = high_resolution_clock::now();
+        ms_fp = t2 - t1;
+        if (VERBOSE) std::cerr << "Pre-compute time (s): " << ms_fp.count() / 1000. << std::endl;
     }
 
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
@@ -43,6 +50,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
     geometry.requireFaceNormals();
     geometry.requireFaceAreas();
     size_t F = mesh.nFaces();
+    // Integrate contributions (single-point quadrature)
     for (size_t i = 0; i < nTets; i++) {
         // Compute query point.
         Vector3 q = {0, 0, 0};
@@ -66,75 +74,8 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
     if (VERBOSE) std::cerr << "Steps 3..." << std::endl;
-    Vector<double> div = faceDivergence(Yt);
-    Vector<double> phi;
-    if (options.levelSetConstraint == LevelSetConstraint::ZeroSet) {
-        // Since the tet mesh conforms to the surface, preserving zero can be done via Dirichlet boundary conditions.
-        Vector<bool> setAMembership = Vector<bool>::Ones(nFaces); // true if "interior" (non-fixed)
-        for (const auto& fIdx : surfaceFaces) setAMembership[abs(fIdx)] = false;
-        int nB = nFaces - setAMembership.cast<int>().sum(); // Eigen sum() casts to bool after summing
-        Vector<double> bcVals = Vector<double>::Zero(nB);
-        BlockDecompositionResult<double> decomp = blockDecomposeSquare(laplaceMat, setAMembership, true);
-        Vector<double> rhsValsA, rhsValsB;
-        decomposeVector(decomp, div, rhsValsA, rhsValsB);
-        Vector<double> combinedRHS = rhsValsA;
-        // shiftDiagonal(decomp.AA, 1e-8);
-        Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
-        phi = reassembleVector(decomp, Aresult, bcVals);
-        phi *= -1;
-    } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
-        // Determine the connected components of the mesh. Do simple depth-first search.
-        std::vector<Eigen::Triplet<double>> triplets;
-        SparseMatrix<double> A;
-        size_t m = 0;
-        size_t F = mesh.nFaces();
-        FaceData<char> marked(mesh, false);
-        geometry.requireFaceIndices();
-        for (Face f : mesh.faces()) {
-            if (marked[f]) continue;
-            marked[f] = true;
-            std::vector<Face> queue = {f};
-            size_t f0 = geometry.faceIndices[f];
-            Face curr;
-            while (!queue.empty()) {
-                curr = queue.back();
-                queue.pop_back();
-                for (Face g : curr.adjacentFaces()) {
-                    if (marked[g]) continue;
-                    triplets.emplace_back(m, geometry.faceIndices[g], -1);
-                    triplets.emplace_back(m, f0, 1);
-                    marked[g] = true;
-                    queue.push_back(g);
-                    m++;
-                }
-            }
-        }
-        geometry.unrequireFaceIndices();
-        A.resize(m, F);
-        A.setFromTriplets(triplets.begin(), triplets.end());
-        SparseMatrix<double> Z(m, m);
-        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
-        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
-        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
-        Vector<double> RHS = Vector<double>::Zero(F + m);
-        RHS.head(F) = div;
-        shiftDiagonal(LHS, 1e-16);
-        Vector<double> soln = solveSquare(LHS, RHS);
-        phi = soln.head(F);
-    } else {
-        phi = poissonSolver->solve(div);
-        phi *= -1;
-        double shift = 0.;
-        double totalArea = 0.;
-        for (size_t i = 0; i < F; i++) {
-            double A = geometry.faceAreas[i];
-            shift += A * phi[i];
-            totalArea += A;
-        }
-        shift /= totalArea;
-        phi -= shift * Vector<double>::Ones(nFaces);
-    }
-    phi = projectOntoVertices(phi);
+    Vector<double> phi = options.fastIntegration ? integrateVectorFieldGreedily(geometry, Yt, options)
+                                                 : integrateVectorField(geometry, Yt, options);
     if (VERBOSE) std::cerr << "\tCompleted" << std::endl;
 
     geometry.unrequireFaceAreas();
@@ -148,7 +89,11 @@ Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNor
     pointGeom.requireTuftedTriangulation();
     pointGeom.tuftedGeom->requireVertexDualAreas();
 
-    if (options.rebuild) {
+    if (options.rebuild || poissonSolver == nullptr) {
+        std::chrono::time_point<high_resolution_clock> t1, t2;
+        std::chrono::duration<double, std::milli> ms_fp;
+        t1 = high_resolution_clock::now();
+        if (VERBOSE) std::cerr << "Building tet mesh..." << std::endl;
         double meanArea = 0.;
         for (size_t i = 0; i < pointGeom.cloud.nPoints(); i++) meanArea += pointGeom.tuftedGeom->vertexDualAreas[i];
         meanArea /= pointGeom.cloud.nPoints();
@@ -164,6 +109,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNor
         tetVolumes = computeTetVolumes();
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
         laplaceMat = buildCrouzeixRaviartLaplacian();
+        dualLaplace = dualLaplacian();
         if (VERBOSE) std::cerr << "Building mass matrix..." << std::endl;
         massMat = buildCrouzeixRaviartMassMatrix();
         avgMat = buildAveragingMatrix();
@@ -172,6 +118,9 @@ Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNor
         SparseMatrix<double> P = avgMat.transpose() * massMat * avgMat;
         projectionSolver.reset(new SquareSolver<double>(P));
         if (VERBOSE) std::cerr << "Tet mesh (re)built" << std::endl;
+        t2 = high_resolution_clock::now();
+        ms_fp = t2 - t1;
+        if (VERBOSE) std::cerr << "Pre-compute time (s): " << ms_fp.count() / 1000. << std::endl;
     }
 
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
@@ -199,23 +148,9 @@ Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNor
     }
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
-    // TODO: try enforcing zeroset/multiple constraints
     if (VERBOSE) std::cerr << "Steps 3..." << std::endl;
-    Vector<double> div = faceDivergence(Yt);
-    Vector<double> phi;
-    phi = poissonSolver->solve(div);
-    phi *= -1;
-    phi = projectOntoVertices(phi);
-    double shift = 0.;
-    double totalArea = 0;
-    for (size_t pIdx = 0; pIdx < P; pIdx++) {
-        double A = pointGeom.tuftedGeom->vertexDualAreas[pIdx];
-        shift += A * phi[pIdx];
-        totalArea += A;
-    }
-    shift /= totalArea;
-    phi -= shift * Vector<double>::Ones(nVertices);
-
+    Vector<double> phi = options.fastIntegration ? integrateVectorFieldGreedily(pointGeom, Yt, options)
+                                                 : integrateVectorField(pointGeom, Yt, options);
     if (VERBOSE) std::cerr << "\tCompleted" << std::endl;
 
     pointGeom.tuftedGeom->unrequireVertexDualAreas();
@@ -224,10 +159,372 @@ Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNor
     return phi;
 }
 
+Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry& geometry, const Eigen::MatrixXd& Yt,
+                                                         const SignedHeat3DOptions& options) {
+
+    geometry.requireFaceIndices();
+
+    SurfaceMesh& mesh = geometry.mesh;
+    Vector<double> div = faceDivergence(Yt);
+    Vector<double> phi;
+    if (options.levelSetConstraint == LevelSetConstraint::ZeroSet) {
+        // Since the tet mesh conforms to the surface, preserving zero can be done via Dirichlet boundary conditions.
+        Vector<bool> setAMembership = Vector<bool>::Ones(nFaces); // true if "interior" (non-fixed)
+        for (const auto& fIdx : surfaceFaces) setAMembership[abs(fIdx)] = false;
+        int nB = nFaces - setAMembership.cast<int>().sum(); // Eigen sum() casts to bool after summing
+        Vector<double> bcVals = Vector<double>::Zero(nB);
+        BlockDecompositionResult<double> decomp = blockDecomposeSquare(laplaceMat, setAMembership, true);
+        Vector<double> rhsValsA, rhsValsB;
+        decomposeVector(decomp, div, rhsValsA, rhsValsB);
+        Vector<double> combinedRHS = rhsValsA;
+        // shiftDiagonal(decomp.AA, 1e-8);
+        Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        phi = reassembleVector(decomp, Aresult, bcVals);
+        phi *= -1;
+    } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
+        // Determine the connected components of the mesh. Do simple depth-first search.
+        // TODO: this seems to not work
+        std::vector<Eigen::Triplet<double>> triplets;
+        SparseMatrix<double> A;
+        size_t m = 0;
+        size_t F = mesh.nFaces();
+        FaceData<bool> marked(mesh, false);
+        geometry.requireFaceIndices();
+        for (Face f : mesh.faces()) {
+            if (marked[f]) continue;
+            marked[f] = true;
+            std::vector<Face> queue = {f};
+            size_t f0 = geometry.faceIndices[f];
+            Face curr;
+            while (!queue.empty()) {
+                curr = queue.back();
+                queue.pop_back();
+                for (Face g : curr.adjacentFaces()) {
+                    if (marked[g]) continue;
+                    triplets.emplace_back(m, geometry.faceIndices[g], -1);
+                    triplets.emplace_back(m, f0, 1);
+                    marked[g] = true;
+                    queue.push_back(g);
+                    m++;
+                }
+            }
+        }
+        geometry.unrequireFaceIndices();
+        A.resize(m, nFaces);
+        A.setFromTriplets(triplets.begin(), triplets.end());
+        SparseMatrix<double> Z(m, m);
+        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
+        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
+        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
+        Vector<double> RHS = Vector<double>::Zero(nFaces + m);
+        RHS.head(nFaces) = div;
+        shiftDiagonal(LHS, 1e-16);
+        Vector<double> soln = solveSquare(LHS, RHS);
+        phi = soln.head(nFaces);
+    } else {
+        // TODO: shift seems off
+        phi = -poissonSolver->solve(div);
+        double shift = averageValueOnSource(geometry, phi);
+        phi -= shift * Vector<double>::Ones(nFaces);
+    }
+    phi = projectOntoVertices(phi);
+
+    geometry.unrequireFaceIndices();
+
+    return phi;
+}
+
+Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositionNormalGeometry& pointGeom,
+                                                         const Eigen::MatrixXd& Yt,
+                                                         const SignedHeat3DOptions& options) {
+
+    Vector<double> phi;
+    switch (options.levelSetConstraint) {
+        case (LevelSetConstraint::None): {
+            Vector<double> div = faceDivergence(Yt);
+            phi = poissonSolver->solve(div);
+            phi *= -1;
+            phi = projectOntoVertices(phi);
+            double shift = averageValueOnSource(pointGeom, phi);
+            phi -= shift * Vector<double>::Ones(nVertices);
+            break;
+        }
+        case (LevelSetConstraint::ZeroSet): {
+            Vector<double> div = vertexDivergence(Yt);
+            size_t P = pointGeom.cloud.nPoints();
+            Vector<bool> setAMembership = Vector<bool>::Ones(nVertices);
+            for (size_t i = 0; i < P; i++) setAMembership[i] = false;
+            int nB = nFaces - setAMembership.cast<int>().sum();
+            Vector<double> bcVals = Vector<double>::Zero(nB);
+            BlockDecompositionResult<double> decomp = blockDecomposeSquare(dualLaplace, setAMembership, true);
+            Vector<double> rhsValsA, rhsValsB;
+            decomposeVector(decomp, div, rhsValsA, rhsValsB);
+            Vector<double> combinedRHS = rhsValsA;
+            // shiftDiagonal(decomp.AA, 1e-8);
+            Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+            phi = reassembleVector(decomp, Aresult, bcVals);
+            phi *= -1;
+            break;
+        }
+        case (LevelSetConstraint::Multiple): {
+            Vector<double> div = vertexDivergence(Yt);
+            std::vector<Eigen::Triplet<double>> triplets;
+            SparseMatrix<double> A;
+            size_t m = 0;
+            size_t P = pointGeom.cloud.nPoints();
+            VertexData<bool> marked(pointGeom.tuftedGeom->mesh, Vector<bool>::Zero(P));
+            pointGeom.tuftedGeom->requireVertexIndices();
+            for (Vertex v : pointGeom.tuftedGeom->mesh.vertices()) {
+                if (marked[v]) continue;
+                marked[v] = true;
+                std::vector<Vertex> queue = {v};
+                size_t v0 = pointGeom.tuftedGeom->vertexIndices[v];
+                Vertex curr;
+                while (!queue.empty()) {
+                    curr = queue.back();
+                    queue.pop_back();
+                    for (Vertex w : curr.adjacentVertices()) {
+                        if (marked[w]) continue;
+                        triplets.emplace_back(m, pointGeom.tuftedGeom->vertexIndices[w], -1);
+                        triplets.emplace_back(m, v0, 1);
+                        marked[w] = true;
+                        queue.push_back(w);
+                        m++;
+                    }
+                }
+            }
+            pointGeom.tuftedGeom->unrequireVertexIndices();
+            A.resize(m, nVertices);
+            A.setFromTriplets(triplets.begin(), triplets.end());
+            SparseMatrix<double> Z(m, m);
+            SparseMatrix<double> LHS1 = horizontalStack<double>({dualLaplace, A.transpose()});
+            SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
+            SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
+            Vector<double> RHS = Vector<double>::Zero(nVertices + m);
+            RHS.head(nVertices) = div;
+            shiftDiagonal(LHS, 1e-16);
+            Vector<double> soln = solveSquare(LHS, RHS);
+            phi = soln.head(nVertices);
+            break;
+        }
+    }
+    return phi;
+}
+
+/* Integrate using breadth-first search. */
+Vector<double> SignedHeatTetSolver::integrateVectorFieldGreedily(VertexPositionGeometry& geometry,
+                                                                 const Eigen::MatrixXd& Yt,
+                                                                 const SignedHeat3DOptions& options) {
+
+    Vector<double> phi(nVertices);
+    SurfaceMesh& mesh = geometry.mesh;
+    size_t V = mesh.nVertices();
+    switch (options.levelSetConstraint) {
+        case (LevelSetConstraint::None): {
+            Vector<bool> visited = Vector<bool>::Zero(nVertices);
+            phi[0] = 0;
+            visited[0] = true;
+            integrateGreedily(Yt, visited, phi);
+            double shift = averageValueOnSource(geometry, phi);
+            phi -= shift * Vector<double>::Ones(nFaces);
+            break;
+        }
+        case (LevelSetConstraint::ZeroSet): {
+            // Fix solution values on source geometry.
+            Vector<bool> visited = Vector<bool>::Zero(nVertices);
+            for (size_t i = 0; i < V; i++) {
+                phi[i] = 0;
+                visited[i] = true;
+            }
+            integrateGreedily(Yt, visited, phi);
+            break;
+        }
+        case (LevelSetConstraint::Multiple): {
+            phi = integrateGreedilyMultipleLevelSets(geometry, Yt);
+            break;
+        }
+    }
+    return phi;
+}
+
+Vector<double> SignedHeatTetSolver::integrateVectorFieldGreedily(pointcloud::PointPositionNormalGeometry& pointGeom,
+                                                                 const Eigen::MatrixXd& Yt,
+                                                                 const SignedHeat3DOptions& options) {
+
+    Vector<double> phi(nVertices);
+    size_t P = pointGeom.cloud.nPoints();
+    switch (options.levelSetConstraint) {
+        case (LevelSetConstraint::None): {
+            Vector<bool> visited = Vector<bool>::Zero(nVertices);
+            phi[0] = 0;
+            visited[0] = true;
+            integrateGreedily(Yt, visited, phi);
+            double shift = averageValueOnSource(pointGeom, phi);
+            phi -= shift * Vector<double>::Ones(nFaces);
+            break;
+        }
+        case (LevelSetConstraint::ZeroSet): {
+            Vector<bool> visited = Vector<bool>::Zero(nVertices);
+            for (size_t i = 0; i < P; i++) {
+                phi[i] = 0;
+                visited[i] = true;
+            }
+            integrateGreedily(Yt, visited, phi);
+            break;
+        }
+        case (LevelSetConstraint::Multiple): {
+            phi = integrateGreedilyMultipleLevelSets(*(pointGeom.tuftedGeom), Yt);
+            break;
+        }
+    }
+    return phi;
+}
+
+void SignedHeatTetSolver::integrateGreedily(const Eigen::MatrixXd& Yt, Vector<bool>& visited,
+                                            Vector<double>& phi) const {
+
+    // Start queue with one of the surface vertices; we're assuming that the tetmesh domain is connected.
+    std::queue<size_t> queue;
+    queue.push(0);
+    while (!queue.empty()) {
+        size_t curr = queue.front();
+        Eigen::Vector3d p = vertices.row(curr);
+        queue.pop();
+        for (size_t tIdx : vertexTet[curr]) {
+            for (int j = 0; j < 4; j++) {
+                size_t neighbor = tets(tIdx, j);
+                if (visited[neighbor]) continue;
+                Eigen::Vector3d q = vertices.row(neighbor);
+                Eigen::Vector3d edge = q - p;
+                Eigen::Vector3d Y = Yt.row(tIdx);
+                phi[neighbor] = phi[curr] + Y.dot(edge);
+                visited[neighbor] = true;
+                queue.push(neighbor);
+            }
+        }
+    }
+}
+
+Vector<double> SignedHeatTetSolver::integrateGreedilyMultipleLevelSets(IntrinsicGeometryInterface& geometry,
+                                                                       const Eigen::MatrixXd& Yt) const {
+
+    // Determine mesh components.
+    SurfaceMesh& mesh = geometry.mesh;
+    geometry.requireVertexIndices();
+    std::vector<int> meshComponent(mesh.nVertices());
+    Vector<bool> visited = Vector<bool>::Zero(nVertices);
+    Vector<double> phi(nVertices);
+    size_t cptIdx = 0;
+    for (Vertex v : mesh.vertices()) {
+        size_t vIdx = geometry.vertexIndices[v];
+        if (meshComponent[vIdx] != -1) continue;
+        meshComponent[vIdx] = cptIdx;
+        std::vector<Vertex> queue = {v};
+        if (cptIdx == 0) phi[vIdx] = 0;
+        while (!queue.empty()) {
+            Vertex curr = queue.back();
+            queue.pop_back();
+            for (Vertex w : curr.adjacentVertices()) {
+                size_t wIdx = geometry.vertexIndices[w];
+                if (meshComponent[wIdx] != -1) continue;
+                meshComponent[wIdx] = cptIdx;
+                if (cptIdx == 0) phi[wIdx] = 0;
+                queue.push_back(w);
+            }
+        }
+        cptIdx++;
+    }
+    geometry.unrequireVertexIndices();
+
+    // integrate
+    size_t V = mesh.nVertices();
+    std::vector<bool> componentVisited(cptIdx, false);
+    std::vector<double> componentValue(cptIdx);
+    std::queue<size_t> queue;
+    queue.push(0);
+    while (!queue.empty()) {
+        size_t curr = queue.front();
+        Eigen::Vector3d p = vertices.row(curr);
+        queue.pop();
+        for (size_t tIdx : vertexTet[curr]) {
+            for (int j = 0; j < 4; j++) {
+                size_t neighbor = tets(tIdx, j);
+                if (visited[neighbor]) continue;
+                if ((neighbor < V) && componentVisited[meshComponent[neighbor]]) {
+                    phi[neighbor] = componentValue[meshComponent[neighbor]];
+                } else {
+                    Eigen::Vector3d q = vertices.row(neighbor);
+                    Eigen::Vector3d edge = q - p;
+                    Eigen::Vector3d Y = Yt.row(tIdx);
+                    phi[neighbor] = phi[curr] + Y.dot(edge);
+                    if (neighbor < V) {
+                        componentVisited[meshComponent[neighbor]] = true;
+                        componentValue[meshComponent[neighbor]] = phi[neighbor];
+                    }
+                }
+                visited[neighbor] = true;
+                queue.push(neighbor);
+            }
+        }
+    }
+    return phi;
+}
+
+double SignedHeatTetSolver::averageValueOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const {
+
+    double shift = 0.;
+    double totalArea = 0.;
+    for (size_t i = 0; i < geometry.mesh.nFaces(); i++) {
+        double A = geometry.faceAreas[i];
+        shift += A * phi[i];
+        totalArea += A;
+    }
+    shift /= totalArea;
+    return shift;
+}
+
+double SignedHeatTetSolver::averageValueOnSource(pointcloud::PointPositionGeometry& pointGeom,
+                                                 const Vector<double>& phi) const {
+
+    double shift = 0.;
+    double totalArea = 0;
+    size_t P = pointGeom.cloud.nPoints();
+    for (size_t pIdx = 0; pIdx < P; pIdx++) {
+        double A = pointGeom.tuftedGeom->vertexDualAreas[pIdx];
+        shift += A * phi[pIdx];
+        totalArea += A;
+    }
+    shift /= totalArea;
+    return shift;
+}
+
 /*
  * Given a piecewise-constant vector field defined on tets, compute FEM integrated divergence per face.
  */
 Vector<double> SignedHeatTetSolver::faceDivergence(const Eigen::MatrixXd& X) const {
+
+    Vector<double> divX = Vector<double>::Zero(nFaces);
+    for (size_t i = 0; i < nTets; i++) {
+        for (int j = 0; j < 4; j++) {
+            int sfIdx = tetFace(i, j);
+            int fIdx = abs(sfIdx);
+            Eigen::Vector3d N = areaWeightedNormalVector(sfIdx);
+            divX[fIdx] += N.dot(X.row(i));
+        }
+    }
+    return divX;
+}
+
+Vector<double> SignedHeatTetSolver::vertexDivergence(const Eigen::MatrixXd& X) const {
+
+    // TODO
+    // Vector<double> divX = Vector<double>::Zero(nVertices);
+    // for (size_t i = 0; i < nTets; i++) {
+    //     for (size_t v = 0; v < 4; v++) {
+    //         Eigen::Vector3d N_jkl = 2. * baseNormal(i, tets.row(i), v, false); // magnitude = 0.5 * baseFaceArea
+    //         divX[tets(i, v)] += N_jkl.dot(X.row(i)) / 3.;
+    //     }
+    // }
 
     Vector<double> divX = Vector<double>::Zero(nFaces);
     for (size_t i = 0; i < nTets; i++) {
@@ -288,6 +585,87 @@ SparseMatrix<double> SignedHeatTetSolver::buildCrouzeixRaviartMassMatrix() const
     }
     M.setFromTriplets(triplets.begin(), triplets.end());
     return M;
+}
+
+/*
+ * Compute the circumcenter of a tetrahedron, given its vertex positions.
+ * Code from [https://igl.ethz.ch/projects/LB3D/dualLaplace.cpp]
+ */
+void tetCircumcenter(const Eigen::Matrix<double, 4, 3>& t, Eigen::Vector3d& c) {
+
+    Eigen::Matrix3d A;
+    Eigen::Vector3d b;
+
+    const double n0 = t.row(0).squaredNorm();
+
+    for (int k = 0; k < 3; ++k) {
+        A.row(k) = t.row(k + 1) - t.row(0);
+        b(k) = t.row(k + 1).squaredNorm() - n0;
+    }
+
+    c = 0.5 * A.fullPivHouseholderQr().solve(b);
+}
+
+/*
+ * Compute the circumcenter of a face, given its vertex positions.
+ * Code from [https://igl.ethz.ch/projects/LB3D/dualLaplace.cpp]
+ */
+void faceCircumcenter(const Eigen::Vector3d& a, const Eigen::Vector3d& b, const Eigen::Vector3d& c,
+                      Eigen::Vector3d& cc) {
+
+    const double l[3]{(b - c).squaredNorm(), (a - c).squaredNorm(), (a - b).squaredNorm()};
+
+    const double ba[3]{l[0] * (l[1] + l[2] - l[0]), l[1] * (l[2] + l[0] - l[1]), l[2] * (l[0] + l[1] - l[2])};
+    const double sum = ba[0] + ba[1] + ba[2];
+
+    cc = (ba[0] / sum) * a + (ba[1] / sum) * b + (ba[2] / sum) * c;
+}
+
+/*
+ * Build the dual Laplacian for the tet mesh from Alexa et al. 2020 (https://igl.ethz.ch/projects/LB3D/LB3D.pdf).
+ * Code from [https://igl.ethz.ch/projects/LB3D/dualLaplace.cpp]
+ */
+SparseMatrix<double> SignedHeatTetSolver::dualLaplacian() const {
+
+    SparseMatrix<double> L(nVertices, nVertices);
+
+    const int turn[4][4]{{-1, 2, 3, 1}, {3, -1, 0, 2}, {1, 3, -1, 0}, {2, 0, 1, -1}};
+
+    auto getTet = [&](const int i, Eigen::Matrix<double, 4, 3>& t) {
+        for (int k = 0; k < 4; ++k) {
+            t.row(k) = vertices.row(tets(i, k));
+        }
+    };
+
+    std::vector<Eigen::Triplet<double>> triplets;
+    Eigen::Vector3d cc;
+    Eigen::Matrix<double, 4, 3> t;
+
+    for (size_t k = 0; k < nTets; k++) {
+        // Compute the circumcenter of the tet.
+        getTet(k, t);
+        tetCircumcenter(t, cc);
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                if (i != j) {
+                    Eigen::Vector3d cf;
+                    faceCircumcenter(t.row(i), t.row(j), t.row(turn[i][j]), cf);
+
+                    const Eigen::Vector3d ce = 0.5 * (t.row(i) + t.row(j));
+
+                    const double vol = tetVolume(t.row(i), ce, cf, cc);
+                    const double wij = 6. * vol / (t.row(i) - t.row(j)).squaredNorm();
+
+                    triplets.emplace_back(tets(k, i), tets(k, j), wij);
+                    triplets.emplace_back(tets(k, j), tets(k, i), wij);
+                    triplets.emplace_back(tets(k, i), tets(k, i), -wij);
+                    triplets.emplace_back(tets(k, j), tets(k, j), -wij);
+                }
+            }
+        }
+    }
+    L.setFromTriplets(triplets.begin(), triplets.end());
+    return L;
 }
 
 Vector<double> SignedHeatTetSolver::projectOntoVertices(const Vector<double>& u) const {
@@ -556,15 +934,6 @@ void SignedHeatTetSolver::tetmeshPointCloud(pointcloud::PointPositionGeometry& p
     in.facetmarkerlist = new int[in.numberoffacets];
     in.numberoftrifaces = in.numberoffacets;
     in.trifacelist = new int[3 * in.numberoffacets];
-    // Copy nodes from input surface mesh.
-    pointGeom.requirePointIndices();
-    for (int i = 0; i < P; i++) {
-        in.pointmarkerlist[i] = 1;
-        Vector3 pos = pointGeom.positions[i];
-        for (int j = 0; j < 3; j++) {
-            in.pointlist[3 * i + j] = pos[j];
-        }
-    }
     // Copy tri faces from triangulation of cube surface.
     for (int i = 0; i < cubeSurface.numberoftrifaces; i++) {
         in.facetmarkerlist[i] = 0;
@@ -581,7 +950,6 @@ void SignedHeatTetSolver::tetmeshPointCloud(pointcloud::PointPositionGeometry& p
             in.trifacelist[3 * i + j] = P + cubeSurface.trifacelist[3 * i + j];
         }
     }
-    pointGeom.unrequirePointIndices();
 
     // Tet mesh!
     try {
@@ -755,7 +1123,6 @@ void SignedHeatTetSolver::getTetmeshData(tetgenio& out) {
     vertices.resize(nVertices, 3);
     tets.resize(nTets, 4);
     faces.resize(nFaces, 3);
-    edges.resize(nEdges, 2);
 
     // Determine element-vertex matrices.
     for (size_t i = 0; i < nVertices; i++) {
@@ -776,17 +1143,9 @@ void SignedHeatTetSolver::getTetmeshData(tetgenio& out) {
         }
     }
     if (VERBOSE) std::cerr << "`faces` constructed" << std::endl;
-    for (size_t i = 0; i < nEdges; i++) {
-        for (int j = 0; j < 2; j++) {
-            edges(i, j) = out.edgelist[2 * i + j];
-        }
-    }
-    if (VERBOSE) std::cerr << "`edges` constructed" << std::endl;
 
     // Determine adjacency info.
     tetFace.resize(nTets, 4);
-    faceTet.resize(nFaces, 2);
-    if (VERBOSE) std::cerr << "adjacency matrices resized" << std::endl;
     for (size_t i = 0; i < nTets; i++) {
         // All tets should already be positively oriented.
         Eigen::MatrixXi tetFaces(4, 3); // oriented faces in the tet
@@ -810,25 +1169,14 @@ void SignedHeatTetSolver::getTetmeshData(tetgenio& out) {
             tetFace(i, j) = s * fIdx;
         }
     }
-    if (VERBOSE) std::cerr << "`tetFace` constructed" << std::endl;
-    for (size_t i = 0; i < nFaces; i++) {
-        for (int j = 0; j < 2; j++) {
-            int tIdx = out.face2tetlist[2 * i + j];
-            if (tIdx == -1) {
-                faceTet(i, j) = -1;
-                continue;
-            }
-            // Determine orientation
-            bool s = false;
-            for (int k = 0; k < 4; k++) {
-                if (i == abs(tetFace(tIdx, k))) {
-                    s = true;
-                }
-            }
-            faceTet(i, s ? 0 : 1) = abs(tIdx);
+    vertexTet.clear();
+    vertexTet.resize(nVertices);
+    for (size_t i = 0; i < nTets; i++) {
+        for (int j = 0; j < 4; j++) {
+            vertexTet[tets(i, j)].insert(i);
         }
     }
-    if (VERBOSE) std::cerr << "`faceTet` constructed" << std::endl;
+    if (VERBOSE) std::cerr << "Adjacency structures constructed" << std::endl;
 }
 
 double SignedHeatTetSolver::computeMeanNodeSpacing() const {

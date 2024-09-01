@@ -26,7 +26,7 @@ Vector3 centroid(pointcloud::PointPositionGeometry& pointGeom) {
     Vector3 c = {0, 0, 0};
     size_t nPoints = pointGeom.cloud.nPoints();
     for (size_t i = 0; i < nPoints; i++) {
-        c += pointGeom.positions[nPoints];
+        c += pointGeom.positions[i];
     }
     c /= nPoints;
     return c;
@@ -37,7 +37,7 @@ double radius(pointcloud::PointPositionGeometry& pointGeom, const Vector3& c) {
     double r = 0;
     size_t nPoints = pointGeom.cloud.nPoints();
     for (size_t i = 0; i < nPoints; i++) {
-        r = std::max(r, (c - pointGeom.positions[nPoints]).norm());
+        r = std::max(r, (c - pointGeom.positions[i]).norm());
     }
     return r;
 }

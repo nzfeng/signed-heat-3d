@@ -22,20 +22,26 @@ class SignedHeatGridSolver {
     bool VERBOSE = true;
 
   private:
-    size_t nx, ny, nz; // number of vertices on x/y/z side of grid
+    size_t nx = 0;
+    size_t ny, nz; // number of vertices on x/y/z side of grid
     Vector3 bboxMin, bboxMax;
 
     double shortTime, cellSize;
 
     SparseMatrix<double> laplaceMat;
     std::unique_ptr<PositiveDefiniteSolver<double>> poissonSolver;
+    FaceData<double> faceAreas;    // of the source geometry
+    FaceData<Vector3> faceNormals; // of the source geometry
 
     SparseMatrix<double> laplacian() const;
     SparseMatrix<double> gradient() const;
+    Vector<double> integrateGreedily(const Eigen::MatrixXd& Yt);
     double evaluateFunction(const Vector<double>& u, const Vector3& q) const;
     double evaluateAverageAlongSourceGeometry(VertexPositionGeometry& geometry, const Vector<double>& u) const;
+    double evaluateAverageAlongSourceGeometry(pointcloud::PointPositionGeometry& pointGeom,
+                                              const Vector<double>& u) const;
     Vector3 barycenter(VertexPositionGeometry& geometry, const Face& f) const;
-
+    void setFaceVectorAreas(VertexPositionGeometry& geometry);
     size_t indicesToNodeIndex(const size_t& i, const size_t& j, const size_t& k) const;
     Vector3 indicesToNodePosition(const size_t& i, const size_t& j, const size_t& k) const;
 };

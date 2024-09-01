@@ -8,7 +8,9 @@ Project page with links to paper, pseudocode, supplementals, & videos: [link](ht
 
 SIGGRAPH talk (10 minutes): [link]()
 
-This Github repository demonstrates the _Signed Heat Method (SHM)_ on **3D volumetric domains**, solving for (generalized) signed distance to triangle meshes, polygon meshes, to point clouds. If you're interested in using the Signed Heat Method in 2D surface domains, go to [this Github repository](https://github.com/nzfeng/signed-heat-demo) which demonstrates the [geometry-central implementation on (2D) surface meshes and point clouds](https://geometry-central.net/surface/algorithms/signed_heat_method/) .
+This Github repository demonstrates the _Signed Heat Method (SHM)_ on **3D volumetric domains**, solving for (generalized) signed distance to triangle meshes, polygon meshes, and point clouds. For visualization, the solution is solved on a background tet mesh or grid, which you do _not_ need to supply yourself -- the program discretizes the domain for you, and you just need to supply the geometry to which you'd like the signed distance. 
+
+If you're interested in using the Signed Heat Method in 2D surface domains, go to [this Github repository](https://github.com/nzfeng/signed-heat-demo) which demonstrates the [geometry-central implementation on (2D) surface meshes and point clouds](https://geometry-central.net/surface/algorithms/signed_heat_method/) .
 
 ![teaser image](media/teaser.png)
 
@@ -56,20 +58,27 @@ An input point cloud should be specified using point positions and normals. Some
 
 # Usage
 
-In addition to the mesh file, you can pass several arguments to the command line, including some flags which are also shown as options in the GUI.
+In addition to the mesh file, you can pass several arguments to the command line, including flags which are also shown as options in the GUI.
 
 |flag | purpose|
 | ------------- |-------------|
 |`--g`, `--grid`| Solve on a background grid. By default, the domain will be discretized as a tet mesh. |
+|`--f`, `--fast`| Solve using a less accurate, but significantly faster, method of integration. |
 |`--V`, `--verbose`| Verbose output. On by default|
 |`--h`| Controls the tet/grid spacing proportional to $10^{-h}$, with larger values indicating more refinement. Default value is 0.|
 |`--help`| Display help. |
 
 This program lets you solve for distance on either a tet-meshed domain, or a background (uniform) grid. The tetmesh option in particular generates a _conforming_ tetmesh to an input triangle mesh. If your source geometry isn't a triangle mesh (e.g. polygon mesh or point cloud), consider using the grid option.
 
-TODO: Currently no hierarchical summation
-TODO: explanation of hCoef
-
 # Output
 
-TODO: isosurfaces
+Polyscope lets you inspect your solution on the interior of the domain by adding [_slice planes_](https://polyscope.run/features/slice_planes/). In this program, you can also contour your solution, and export isosurfaces as OBJ files.
+
+# Performance
+
+## Fast summation/convolution
+In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution. Currently no acceleration is applied; the integral is evaluted simply by direct summation. More performance-critical implementations may want to implement hierarchical summation.
+
+## Fast integration
+
+TODO: multithreading for summation; fast local integration
