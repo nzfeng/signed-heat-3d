@@ -97,6 +97,7 @@ void solve() {
                           ->setIsolinesEnabled(true);
         gridScalarQ->setEnabled(true);
     }
+    if (VERBOSE) std::cerr << "min: " << PHI.minCoeff() << "\tmax: " << PHI.maxCoeff() << std::endl;
     polyscope::removeLastSceneSlicePlane();
     psPlane = polyscope::addSceneSlicePlane();
     psPlane->setDrawPlane(false);
