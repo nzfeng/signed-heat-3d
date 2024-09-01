@@ -69,6 +69,7 @@ void solve() {
     SHM_OPTIONS.levelSetConstraint = static_cast<LevelSetConstraint>(CONSTRAINT_MODE);
     SHM_OPTIONS.tCoef = TCOEF;
     SHM_OPTIONS.hCoef = HCOEF;
+    std::string cmapName = (SHM_OPTIONS.levelSetConstraint == LevelSetConstraint::Multiple) ? "viridis" : "coolwarm";
     if (MESH_MODE == MeshMode::Tet) {
         if (VERBOSE) std::cerr << "\nSolving on tet mesh..." << std::endl;
         t1 = high_resolution_clock::now();
@@ -79,7 +80,7 @@ void solve() {
         if (VERBOSE) std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
         polyscope::getVolumeMesh("domain")
             ->addVertexScalarQuantity("GSD", PHI)
-            ->setColorMap("coolwarm")
+            ->setColorMap(cmapName)
             ->setIsolinesEnabled(true)
             ->setEnabled(true);
         polyscope::getVolumeMesh("domain")->setCullWholeElements(false);
@@ -92,7 +93,7 @@ void solve() {
         if (VERBOSE) std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
         gridScalarQ = polyscope::getVolumeGrid("domain")
                           ->addNodeScalarQuantity("GSD", PHI)
-                          ->setColorMap("coolwarm")
+                          ->setColorMap(cmapName)
                           ->setIsolinesEnabled(true);
         gridScalarQ->setEnabled(true);
     }

@@ -42,7 +42,7 @@ class SignedHeatTetSolver {
     Eigen::MatrixXi faces;    // faces -- each row is vertex indices
     size_t nVertices, nTets, nFaces, nEdges;
 
-    Eigen::VectorXd faceAreas, tetVolumes, vertexDualVolumes;
+    Eigen::VectorXd faceAreas, tetVolumes;
     Eigen::MatrixXi tetFace; // (nTets x 4) tet-face (signed) adjacency
     std::vector<std::set<size_t>> vertexTet;
 
@@ -73,8 +73,9 @@ class SignedHeatTetSolver {
     Vector<double> vertexDivergence(const Eigen::MatrixXd& X) const;
     Vector<double> projectOntoVertices(const Vector<double>& u) const;
     SparseMatrix<double> buildAveragingMatrix() const;
-    double averageValueOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const;
-    double averageValueOnSource(pointcloud::PointPositionGeometry& pointGeom, const Vector<double>& phi) const;
+    double averageFaceDataOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const;
+    double averageVertexDataOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const;
+    double averageVertexDataOnSource(pointcloud::PointPositionGeometry& pointGeom, const Vector<double>& phi) const;
 
     //== tet mesh utilities
     Eigen::VectorXd computeTetVolumes() const;

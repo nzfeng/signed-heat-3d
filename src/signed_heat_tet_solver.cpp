@@ -218,13 +218,12 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(nFaces + m);
         RHS.head(nFaces) = div;
-        shiftDiagonal(LHS, 1e-16);
         Vector<double> soln = solveSquare(LHS, RHS);
-        phi = soln.head(nFaces);
+        phi = -soln.head(nFaces);
     } else {
         // TODO: shift seems off
         phi = -poissonSolver->solve(div);
-        double shift = averageValueOnSource(geometry, phi);
+        double shift = averageFaceDataOnSource(geometry, phi);
         phi -= shift * Vector<double>::Ones(nFaces);
     }
     phi = projectOntoVertices(phi);
@@ -245,7 +244,7 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             phi = poissonSolver->solve(div);
             phi *= -1;
             phi = projectOntoVertices(phi);
-            double shift = averageValueOnSource(pointGeom, phi);
+            double shift = averageVertexDataOnSource(pointGeom, phi);
             phi -= shift * Vector<double>::Ones(nVertices);
             break;
         }
@@ -325,8 +324,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldGreedily(VertexPositionG
             phi[0] = 0;
             visited[0] = true;
             integrateGreedily(Yt, visited, phi);
-            double shift = averageValueOnSource(geometry, phi);
-            phi -= shift * Vector<double>::Ones(nFaces);
+            double shift = averageVertexDataOnSource(geometry, phi);
+            phi -= shift * Vector<double>::Ones(nVertices);
             break;
         }
         case (LevelSetConstraint::ZeroSet): {
@@ -359,8 +358,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldGreedily(pointcloud::Poi
             phi[0] = 0;
             visited[0] = true;
             integrateGreedily(Yt, visited, phi);
-            double shift = averageValueOnSource(pointGeom, phi);
-            phi -= shift * Vector<double>::Ones(nFaces);
+            double shift = averageVertexDataOnSource(pointGeom, phi);
+            phi -= shift * Vector<double>::Ones(nVertices);
             break;
         }
         case (LevelSetConstraint::ZeroSet): {
@@ -470,12 +469,16 @@ Vector<double> SignedHeatTetSolver::integrateGreedilyMultipleLevelSets(Intrinsic
     return phi;
 }
 
-double SignedHeatTetSolver::averageValueOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const {
+double SignedHeatTetSolver::averageFaceDataOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const {
 
     double shift = 0.;
     double totalArea = 0.;
-    for (size_t i = 0; i < geometry.mesh.nFaces(); i++) {
-        double A = geometry.faceAreas[i];
+    for (const auto& fIdx : surfaceFaces) {
+        size_t i = abs(fIdx);
+        Eigen::Vector3d a = vertices.row(faces(i, 0));
+        Eigen::Vector3d b = vertices.row(faces(i, 1));
+        Eigen::Vector3d c = vertices.row(faces(i, 2));
+        double A = 0.5 * ((a - c).cross(b - c)).norm();
         shift += A * phi[i];
         totalArea += A;
     }
@@ -483,8 +486,24 @@ double SignedHeatTetSolver::averageValueOnSource(VertexPositionGeometry& geometr
     return shift;
 }
 
-double SignedHeatTetSolver::averageValueOnSource(pointcloud::PointPositionGeometry& pointGeom,
-                                                 const Vector<double>& phi) const {
+double SignedHeatTetSolver::averageVertexDataOnSource(VertexPositionGeometry& geometry,
+                                                      const Vector<double>& phi) const {
+
+    double shift = 0.;
+    double totalArea = 0.;
+    geometry.requireVertexDualAreas();
+    for (size_t i = 0; i < geometry.mesh.nVertices(); i++) {
+        double A = geometry.vertexDualAreas[i];
+        shift += A * phi[i];
+        totalArea += A;
+    }
+    shift /= totalArea;
+    geometry.unrequireVertexDualAreas();
+    return shift;
+}
+
+double SignedHeatTetSolver::averageVertexDataOnSource(pointcloud::PointPositionGeometry& pointGeom,
+                                                      const Vector<double>& phi) const {
 
     double shift = 0.;
     double totalArea = 0;
