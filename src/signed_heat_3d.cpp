@@ -58,3 +58,32 @@ double meanEdgeLength(IntrinsicGeometryInterface& geom) {
     geom.unrequireEdgeLengths();
     return h;
 }
+
+void setFaceVectorAreas(VertexPositionGeometry& geometry, FaceData<double>& areas, FaceData<Vector3>& normals) {
+
+    SurfaceMesh& mesh = geometry.mesh;
+    if (mesh.isTriangular()) {
+        geometry.requireFaceAreas();
+        geometry.requireFaceNormals();
+        areas = geometry.faceAreas;
+        normals = geometry.faceNormals;
+        geometry.unrequireFaceAreas();
+        geometry.unrequireFaceNormals();
+    }
+    // Use shoelace formula.
+    areas = FaceData<double>(mesh);
+    normals = FaceData<Vector3>(mesh);
+    for (Face f : mesh.faces()) {
+        Vector3 N = {0, 0, 0};
+        for (Halfedge he : f.adjacentHalfedges()) {
+            Vertex vA = he.vertex();
+            Vertex vB = he.next().vertex();
+            Vector3 pA = geometry.vertexPositions[vA];
+            Vector3 pB = geometry.vertexPositions[vB];
+            N += cross(pA, pB);
+        }
+        N *= 0.5;
+        areas[f] = N.norm();
+        normals[f] = N / areas[f];
+    }
+}

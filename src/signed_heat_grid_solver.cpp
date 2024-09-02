@@ -21,7 +21,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
             boundMin[i] = bboxMin[i];
             boundMax[i] = bboxMax[i];
         }
-        nx = 2 * std::pow(10, options.hCoef + 1); ny = nx; nz = nx;
+        nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
         // clang-format on
         cellSize = 2. * s / nx;
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
@@ -44,11 +44,10 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     double lambda = std::sqrt(1. / shortTime);
     size_t totalNodes = nx * ny * nz;
     Eigen::VectorXd Y = Eigen::VectorXd::Zero(3 * totalNodes);
-    setFaceVectorAreas(geometry);
-
-    for (size_t k = 0; k < nz; k++) {
+    setFaceVectorAreas(geometry, faceAreas, faceNormals);
+    for (size_t i = 0; i < nx; i++) {
         for (size_t j = 0; j < ny; j++) {
-            for (size_t i = 0; i < nx; i++) {
+            for (size_t k = 0; k < nz; k++) {
                 size_t idx = indicesToNodeIndex(i, j, k);
                 Vector3 x = indicesToNodePosition(i, j, k);
                 for (Face f : mesh.faces()) {
@@ -68,12 +67,20 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
     // Integrate gradient to get distance.
-    // TODO: distances seem divided by a factor of 2
     if (VERBOSE) std::cerr << "Step 3..." << std::endl;
     SparseMatrix<double> D = gradient(); // 3N x N
     Vector<double> divYt = D.transpose() * Y;
     // No level set constraints implemented for grid.
-    Vector<double> phi = options.fastIntegration ? integrateGreedily(Y) : -poissonSolver->solve(divYt);
+    Vector<double> phi;
+    if (options.fastIntegration) {
+        phi = integrateGreedily(Y);
+    } else {
+        if (options.rebuild || poissonSolver == nullptr) {
+            if (VERBOSE) std::cerr << "Factorizing Laplacian..." << std::endl;
+            poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
+        }
+        phi = -poissonSolver->solve(divYt);
+    }
     double shift = evaluateAverageAlongSourceGeometry(geometry, phi);
     phi -= shift * Vector<double>::Ones(totalNodes);
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
@@ -94,20 +101,16 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         // clang-format off
         bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
         bboxMin += c; bboxMax += c;
-        std::cerr << bboxMin << " " << bboxMax <<std::endl;
         glm::vec3 boundMin, boundMax;
         for (int i = 0; i < 3; i++) {
             boundMin[i] = bboxMin[i];
             boundMax[i] = bboxMax[i];
         }
-        nx = 2 * std::pow(10, options.hCoef + 1); ny = nx; nz = nx;
+        nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
         // clang-format on
         cellSize = 2. * s / nx;
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
         laplaceMat = laplacian();
-        if (VERBOSE) std::cerr << "Factorizing Laplacian..." << std::endl;
-        poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
-        if (VERBOSE) std::cerr << "Matrices factorized." << std::endl;
         t2 = high_resolution_clock::now();
         ms_fp = t2 - t1;
         if (VERBOSE) std::cerr << "Pre-compute time (s): " << ms_fp.count() / 1000. << std::endl;
@@ -125,10 +128,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
     size_t totalNodes = nx * ny * nz;
     Eigen::VectorXd Y = Eigen::VectorXd::Zero(3 * totalNodes);
     size_t P = pointGeom.cloud.nPoints();
-
-    for (size_t k = 0; k < nz; k++) {
+    for (size_t i = 0; i < nx; i++) {
         for (size_t j = 0; j < ny; j++) {
-            for (size_t i = 0; i < nx; i++) {
+            for (size_t k = 0; k < nz; k++) {
                 size_t idx = indicesToNodeIndex(i, j, k);
                 Vector3 y = indicesToNodePosition(i, j, k);
                 for (size_t pIdx = 0; pIdx < P; pIdx++) {
@@ -151,7 +153,16 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
     SparseMatrix<double> D = gradient(); // 3N x N
     Vector<double> divYt = D.transpose() * Y;
     // No level set constraints implemented for grid.
-    Vector<double> phi = options.fastIntegration ? integrateGreedily(Y) : -poissonSolver->solve(divYt);
+    Vector<double> phi;
+    if (options.fastIntegration) {
+        phi = integrateGreedily(Y);
+    } else {
+        if (options.rebuild || poissonSolver == nullptr) {
+            if (VERBOSE) std::cerr << "Factorizing Laplacian..." << std::endl;
+            poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
+        }
+        phi = -poissonSolver->solve(divYt);
+    }
     double shift = evaluateAverageAlongSourceGeometry(pointGeom, phi);
     phi -= shift * Vector<double>::Ones(totalNodes);
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
@@ -176,36 +187,53 @@ Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::VectorXd& Yt
         Eigen::Vector3d Yp = {Yt(3 * currIdx), Yt(3 * currIdx + 1), Yt(3 * currIdx + 2)};
         queue.pop();
         for (int i = 0; i < 3; i++) {
-            if (curr[i] < dims[i] - 1 || curr[i] > 0) {
+            if (curr[i] > 0) {
                 next = curr;
-                next[i] += (curr[i] > 0) ? -1 : 1;
+                next[i] -= 1;
                 size_t nextIdx = indicesToNodeIndex(next[0], next[1], next[2]);
-                if (visited[nextIdx]) continue;
-                Vector3 q = indicesToNodePosition(next[0], next[1], next[2]);
-                Vector3 edge = q - p;
-                Eigen::Vector3d Yq = {Yt(3 * nextIdx), Yt(3 * nextIdx + 1), Yt(3 * nextIdx + 2)};
-                Eigen::Vector3d Y_avg = 0.5 * (Yq + Yp);
-                Vector3 Y = {Y_avg[0], Y_avg[1], Y_avg[2]};
-                phi[nextIdx] = phi[currIdx] + dot(Y, edge);
-                visited[nextIdx] = true;
-                queue.push(next);
+                if (!visited[nextIdx]) {
+                    Vector3 q = indicesToNodePosition(next[0], next[1], next[2]);
+                    Vector3 edge = q - p;
+                    Eigen::Vector3d Yq = {Yt(3 * nextIdx), Yt(3 * nextIdx + 1), Yt(3 * nextIdx + 2)};
+                    Eigen::Vector3d Y_avg = (Yq + Yp);
+                    Y_avg /= Y_avg.norm();
+                    Vector3 Y = {Y_avg[0], Y_avg[1], Y_avg[2]};
+                    phi[nextIdx] = phi[currIdx] + dot(Y, edge);
+                    visited[nextIdx] = true;
+                    queue.push(next);
+                }
+            }
+            if (curr[i] < dims[i] - 1) {
+                next = curr;
+                next[i] += 1;
+                size_t nextIdx = indicesToNodeIndex(next[0], next[1], next[2]);
+                if (!visited[nextIdx]) {
+                    Vector3 q = indicesToNodePosition(next[0], next[1], next[2]);
+                    Vector3 edge = q - p;
+                    Eigen::Vector3d Yq = {Yt(3 * nextIdx), Yt(3 * nextIdx + 1), Yt(3 * nextIdx + 2)};
+                    Eigen::Vector3d Y_avg = (Yq + Yp);
+                    Y_avg /= Y_avg.norm();
+                    Vector3 Y = {Y_avg[0], Y_avg[1], Y_avg[2]};
+                    phi[nextIdx] = phi[currIdx] + dot(Y, edge);
+                    visited[nextIdx] = true;
+                    queue.push(next);
+                }
             }
         }
     }
     return phi;
 }
 
-/* Builds negative-definite Laplace; should be equal to D^TD (where D = gradient operator), so this function is somewhat
- * redundant. */
+/* Builds negative-definite Laplace */
 SparseMatrix<double> SignedHeatGridSolver::laplacian() const {
 
     // Use 5-point stencil (well, I guess 7-point in 3D)
     size_t N = nx * ny * nz;
     SparseMatrix<double> L(N, N);
     std::vector<Eigen::Triplet<double>> triplets;
-    for (size_t k = 0; k < nz; k++) {
+    for (size_t i = 0; i < nx; i++) {
         for (size_t j = 0; j < ny; j++) {
-            for (size_t i = 0; i < nx; i++) {
+            for (size_t k = 0; k < nz; k++) {
                 size_t currIdx = indicesToNodeIndex(i, j, k);
                 size_t currX = currIdx;
                 size_t currY = currIdx;
@@ -260,11 +288,36 @@ SparseMatrix<double> SignedHeatGridSolver::gradient() const {
     size_t N = nx * ny * nz;
     SparseMatrix<double> D(3 * N, N);
     std::vector<Eigen::Triplet<double>> tripletList;
-    // Forward differences; could also take centered differences
-    for (size_t k = 0; k < nz; k++) {
+    for (size_t i = 0; i < nx; i++) {
         for (size_t j = 0; j < ny; j++) {
-            for (size_t i = 0; i < nx; i++) {
+            for (size_t k = 0; k < nz; k++) {
                 size_t currIdx = indicesToNodeIndex(i, j, k);
+                // if (i < nx - 1) {
+                //     size_t nextX = indicesToNodeIndex(i + 1, j, k);
+                //     tripletList.emplace_back(3 * currIdx, nextX, 1);
+                // }
+                // if (i > 0) {
+                //     size_t prevX = indicesToNodeIndex(i - 1, j, k);
+                //     tripletList.emplace_back(3 * currIdx, prevX, -1);
+                // }
+                // if (j < ny - 1) {
+                //     size_t nextY = indicesToNodeIndex(i, j + 1, k);
+                //     tripletList.emplace_back(3 * currIdx + 1, nextY, 1);
+                // }
+                // if (j > 0) {
+                //     size_t prevY = indicesToNodeIndex(i, j - 1, k);
+                //     tripletList.emplace_back(3 * currIdx + 1, prevY, -1);
+                // }
+                // if (k < nz - 1) {
+                //     size_t nextZ = indicesToNodeIndex(i, j, k + 1);
+                //     tripletList.emplace_back(3 * currIdx + 2, nextZ, 1);
+                // }
+                // if (k > 0) {
+                //     size_t prevZ = indicesToNodeIndex(i, j, k - 1);
+                //     tripletList.emplace_back(3 * currIdx + 2, prevZ, -1);
+                // }
+
+                // forward differences
                 size_t currX = currIdx;
                 size_t currY = currIdx;
                 size_t currZ = currIdx;
@@ -284,13 +337,10 @@ SparseMatrix<double> SignedHeatGridSolver::gradient() const {
                     nextZ = currIdx;
                     currZ = indicesToNodeIndex(i, j, k - 1);
                 }
-                // forward difference in x
                 tripletList.emplace_back(3 * currIdx, nextX, 1);
                 tripletList.emplace_back(3 * currIdx, currX, -1);
-                // forward difference in y
                 tripletList.emplace_back(3 * currIdx + 1, nextY, 1);
                 tripletList.emplace_back(3 * currIdx + 1, currY, -1);
-                // forward difference in z
                 tripletList.emplace_back(3 * currIdx + 2, nextZ, 1);
                 tripletList.emplace_back(3 * currIdx + 2, currZ, -1);
             }
@@ -369,37 +419,9 @@ Vector3 SignedHeatGridSolver::barycenter(VertexPositionGeometry& geometry, const
     return c;
 }
 
-void SignedHeatGridSolver::setFaceVectorAreas(VertexPositionGeometry& geometry) {
-
-    SurfaceMesh& mesh = geometry.mesh;
-    if (mesh.isTriangular()) {
-        geometry.requireFaceAreas();
-        geometry.requireFaceNormals();
-        faceAreas = geometry.faceAreas;
-        faceNormals = geometry.faceNormals;
-        geometry.unrequireFaceAreas();
-        geometry.unrequireFaceNormals();
-    }
-    // Use shoelace formula.
-    faceAreas = FaceData<double>(mesh);
-    faceNormals = FaceData<Vector3>(mesh);
-    for (Face f : mesh.faces()) {
-        Vector3 N = {0, 0, 0};
-        for (Halfedge he : f.adjacentHalfedges()) {
-            Vertex vA = he.vertex();
-            Vertex vB = he.next().vertex();
-            Vector3 pA = geometry.vertexPositions[vA];
-            Vector3 pB = geometry.vertexPositions[vB];
-            N += cross(pA, pB);
-        }
-        N *= 0.5;
-        faceAreas[f] = N.norm();
-        faceNormals[f] = N / faceAreas[f];
-    }
-}
-
 size_t SignedHeatGridSolver::indicesToNodeIndex(const size_t& i, const size_t& j, const size_t& k) const {
-    return i + j * nx + k * (nx * ny);
+    // This is the opposite order I would have expected from Polyscope
+    return i * (ny * nz) + j * nz + k;
 }
 
 Vector3 SignedHeatGridSolver::indicesToNodePosition(const size_t& i, const size_t& j, const size_t& k) const {

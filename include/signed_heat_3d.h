@@ -32,3 +32,4 @@ double radius(VertexPositionGeometry& geometry, const Vector3& centroid);
 double radius(pointcloud::PointPositionGeometry& pointGeom, const Vector3& c);
 double yukawaPotential(const Vector3& x, const Vector3& y, const double& shortTime);
 double meanEdgeLength(IntrinsicGeometryInterface& geom);
+void setFaceVectorAreas(VertexPositionGeometry& geometry, FaceData<double>& areas, FaceData<Vector3>& normals);

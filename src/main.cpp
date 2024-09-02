@@ -112,12 +112,25 @@ void solve() {
     SHM_OPTIONS.rebuild = false;
 }
 
+void contour() {
+    if (LAST_SOLVER_MODE == MeshMode::Tet) {
+        tetSolver->isosurface(isoMesh, isoGeom, PHI, ISOVAL);
+        polyscope::registerSurfaceMesh("isosurface", isoGeom->vertexPositions, isoMesh->getFaceVertexList());
+    } else {
+        gridScalarQ->setIsosurfaceLevel(ISOVAL);
+        gridScalarQ->setIsosurfaceVizEnabled(true);
+        gridScalarQ->setSlicePlanesAffectIsosurface(false);
+        gridScalarQ->registerIsosurfaceAsMesh("isosurface");
+    }
+    polyscope::getSurfaceMesh("isosurface")->setIgnoreSlicePlane(psPlane->name, true);
+}
+
 void callback() {
 
     if (ImGui::Button("Solve")) {
         solve();
     }
-    if (mesh == nullptr || mesh->isTriangular()) ImGui::RadioButton("on tet mesh", &MESH_MODE, MeshMode::Tet);
+    ImGui::RadioButton("on tet mesh", &MESH_MODE, MeshMode::Tet);
     ImGui::RadioButton("on grid", &MESH_MODE, MeshMode::Grid);
 
     ImGui::Separator();
@@ -128,7 +141,7 @@ void callback() {
     if (ImGui::InputFloat("hCoef (mesh spacing)", &HCOEF)) {
         SHM_OPTIONS.rebuild = true;
     }
-    if (MESH_MODE != MeshMode::Grid) {
+    if (MESH_MODE != MeshMode::Grid || (mesh == nullptr && mesh->isTriangular())) {
         ImGui::RadioButton("Constrain zero set", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::ZeroSet));
         ImGui::RadioButton("Constrain multiple levelsets", &CONSTRAINT_MODE,
                            static_cast<int>(LevelSetConstraint::Multiple));
@@ -140,17 +153,10 @@ void callback() {
         ImGui::Text("Contour options");
         ImGui::Separator();
         if (ImGui::SliderFloat("Contour (drag slider)", &ISOVAL, PHI.minCoeff(), PHI.maxCoeff())) {
-            if (LAST_SOLVER_MODE == MeshMode::Tet) {
-                tetSolver->isosurface(isoMesh, isoGeom, PHI, ISOVAL);
-                polyscope::registerSurfaceMesh("isosurface", isoGeom->vertexPositions, isoMesh->getFaceVertexList());
-            } else {
-                gridScalarQ->setIsosurfaceLevel(ISOVAL);
-                gridScalarQ->setIsosurfaceVizEnabled(true);
-                polyscope::SlicePlane* p = polyscope::addSceneSlicePlane();
-                gridScalarQ->setSlicePlanesAffectIsosurface(false);
-                gridScalarQ->registerIsosurfaceAsMesh("isosurface");
-            }
-            polyscope::getSurfaceMesh("isosurface")->setIgnoreSlicePlane(psPlane->name, true);
+            contour();
+        }
+        if (ImGui::InputFloat("Contour (enter value)", &ISOVAL)) {
+            contour();
         }
         if (ImGui::Button("Export isosurface")) {
             if (LAST_SOLVER_MODE == MeshMode::Grid) {
@@ -252,12 +258,7 @@ int main(int argc, char** argv) {
     if (ext != "pc") {
         std::tie(mesh, geometry) = readSurfaceMesh(meshFilepath);
         psMesh = polyscope::registerSurfaceMesh(MESHNAME, geometry->vertexPositions, mesh->getFaceVertexList());
-        if (!mesh->isTriangular()) {
-            std::cerr << "Input mesh is non-triangular, reverting to grid mode." << std::endl;
-            MESH_MODE = MeshMode::Grid;
-        } else {
-            psMesh->setAllPermutations(polyscopePermutations(*mesh));
-        }
+        if (mesh->isTriangular()) psMesh->setAllPermutations(polyscopePermutations(*mesh));
         INPUT_MODE = InputMode::Mesh;
     } else {
         std::vector<Vector3> positions, normals;

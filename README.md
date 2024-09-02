@@ -65,20 +65,19 @@ In addition to the mesh file, you can pass several arguments to the command line
 |`--g`, `--grid`| Solve on a background grid. By default, the domain will be discretized as a tet mesh. |
 |`--f`, `--fast`| Solve using a less accurate, but significantly faster, method of integration. |
 |`--V`, `--verbose`| Verbose output. On by default|
-|`--h`| Controls the tet/grid spacing proportional to $10^{-h}$, with larger values indicating more refinement. Default value is 0.|
+|`--h`| Controls the tet/grid spacing proportional to $2^{-h}$, with larger values indicating more refinement. Default value is 0.|
 |`--help`| Display help. |
 
-This program lets you solve for distance on either a tet-meshed domain, or a background (uniform) grid. The tetmesh option in particular generates a _conforming_ tetmesh to an input triangle mesh. If your source geometry isn't a triangle mesh (e.g. polygon mesh or point cloud), consider using the grid option.
+# Performance
+
+There is no acceleration is applied in this program, even though there are several obvious areas of performance improvement.
+
+In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution; the integral is evaluted simply by direct summation, even though Step 1 is trivially parallelizable. 
+
+One could also optimize loop order when iterating over source/domain elements (whichever is smaller) for better cache behavior.
+
+More performance-critical implementations could also implement hierarchical summation.
 
 # Output
 
 Polyscope lets you inspect your solution on the interior of the domain by adding [_slice planes_](https://polyscope.run/features/slice_planes/). In this program, you can also contour your solution, and export isosurfaces as OBJ files.
-
-# Performance
-
-## Fast summation/convolution
-In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution. Currently no acceleration is applied; the integral is evaluted simply by direct summation. More performance-critical implementations may want to implement hierarchical summation.
-
-## Fast integration
-
-TODO: multithreading for summation; fast local integration
