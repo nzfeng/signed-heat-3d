@@ -69,10 +69,8 @@ else()
 endif()
 
 # == Deps
-add_subdirectory(../../Forks/geometry-central deps/geometry-central)
-add_subdirectory(../../Forks/polyscope deps/polyscope)
-#add_subdirectory(deps/geometry-central)
-#add_subdirectory(deps/polyscope)
+add_subdirectory(deps/geometry-central)
+add_subdirectory(deps/polyscope)
 add_subdirectory(deps/tetgen)
 
 # == Build our project stuff
