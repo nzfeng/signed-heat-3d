@@ -65,8 +65,8 @@ In addition to the mesh file, you can pass several arguments to the command line
 |flag | purpose|
 | ------------- |-------------|
 |`--g`, `--grid`| Solve on a background grid. By default, the domain will be discretized as a tet mesh. |
-|`--f`, `--fast`| Solve using a less accurate, but significantly faster, method of integration. |
-|`--V`, `--verbose`| Verbose output. On by default|
+|`--f`, `--fast`| Solve using a less accurate, but faster, method of integration. |
+|`--V`, `--verbose`| Verbose output. On by default.|
 |`--h`| Controls the tet/grid spacing proportional to $2^{-h}$, with larger values indicating more refinement. Default value is 0.|
 |`--help`| Display help. |
 
