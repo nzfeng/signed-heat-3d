@@ -69,6 +69,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     if (VERBOSE) std::cerr << "Step 3..." << std::endl;
     SparseMatrix<double> D = gradient(); // 3N x N
     Vector<double> divYt = D.transpose() * Y;
+    for (size_t i = 0; i < divYt.size(); i++) {
+        if (std::isinf(divYt[i]) || std::isnan(divYt[i])) divYt[i] = 0.;
+    }
     // No level set constraints implemented for grid.
     Vector<double> phi;
     if (options.fastIntegration) {
