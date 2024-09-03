@@ -10,7 +10,7 @@ For visualization, the solution is solved on a background tet mesh or grid, whic
 
 If you're interested in using the Signed Heat Method in 2D surface domains, go to [this Github repository](https://github.com/nzfeng/signed-heat-demo) which demonstrates the [geometry-central implementation on (2D) surface meshes and point clouds](https://geometry-central.net/surface/algorithms/signed_heat_method/) .
 
-![teaser image](media/teaser.pdf)
+![teaser image](media/teaser.png)
 
 If this code contributes to academic work, please cite as:
 ```bibtex
