@@ -7,6 +7,7 @@ SignedHeatTetSolver::SignedHeatTetSolver() {}
 Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geometry,
                                                     const SignedHeat3DOptions& options) {
 
+    bool isConforming = false;
     if (options.rebuild || vertices.size() == 0) {
         std::chrono::time_point<high_resolution_clock> t1, t2;
         std::chrono::duration<double, std::milli> ms_fp;
@@ -20,9 +21,8 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
         double areaScale = std::pow(2, -options.hCoef);
         TETFLAGS = TET_PREFIX + std::to_string(areaScale * meanFaceArea);
         TETFLAGS_PRESERVE = TET_PREFIX + std::to_string(areaScale * meanFaceArea) + "Y";
-        if (mesh.isTriangular()) {
-            tetmeshDomain(geometry);
-        } else {
+        if (mesh.isTriangular()) isConforming = tetmeshDomain(geometry);
+        if (!isConforming) {
             size_t nPts = mesh.nVertices();
             cloud = std::unique_ptr<pointcloud::PointCloud>(new pointcloud::PointCloud(nPts));
             pointcloud::PointData<Vector3> pointPositions = pointcloud::PointData<Vector3>(*cloud);
@@ -74,7 +74,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
 
     if (VERBOSE) std::cerr << "Step 3..." << std::endl;
     Vector<double> phi;
-    if (mesh.isTriangular()) {
+    if (isConforming) {
         phi = options.fastIntegration ? integrateVectorFieldGreedily(geometry, Yt, options)
                                       : integrateVectorField(geometry, Yt, options);
     } else {
@@ -161,7 +161,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNor
 Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry& geometry, const Eigen::MatrixXd& Yt,
                                                          const SignedHeat3DOptions& options) {
 
-    geometry.requireFaceIndices();
+    if (options.useCrouzeixRaviart) return integrateVectorFieldToFaces(geometry, Yt, options);
 
     SurfaceMesh& mesh = geometry.mesh;
     Vector<double> div = vertexDivergence(Yt);
@@ -228,9 +228,92 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         phi -= shift * Vector<double>::Ones(nVertices);
     }
 
+    return phi;
+}
+
+Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGeometry& geometry,
+                                                                const Eigen::MatrixXd& Yt,
+                                                                const SignedHeat3DOptions& options) {
+
+    geometry.requireFaceIndices();
+
+    SurfaceMesh& mesh = geometry.mesh;
+    Vector<double> div = faceDivergence(Yt);
+    Vector<double> phi;
+    laplaceCR = buildCrouzeixRaviartLaplacian();
+    if (options.levelSetConstraint == LevelSetConstraint::ZeroSet) {
+        // Since the tet mesh conforms to the surface, preserving zero can be done via Dirichlet boundary conditions.
+        Vector<bool> setAMembership = Vector<bool>::Ones(nFaces);
+        for (const int& fIdx : surfaceFaces) setAMembership[abs(fIdx)] = false;
+        int nB = nFaces - setAMembership.cast<int>().sum();
+        Vector<double> bcVals = Vector<double>::Zero(nB);
+        BlockDecompositionResult<double> decomp = blockDecomposeSquare(laplaceCR, setAMembership, true);
+        Vector<double> rhsValsA, rhsValsB;
+        decomposeVector(decomp, div, rhsValsA, rhsValsB);
+        Vector<double> combinedRHS = rhsValsA;
+        Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        phi = reassembleVector(decomp, Aresult, bcVals);
+    } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
+        // Determine the connected components of the mesh. Do simple depth-first search.
+        std::vector<Eigen::Triplet<double>> triplets;
+        SparseMatrix<double> A;
+        size_t m = 0;
+        size_t F = mesh.nFaces();
+        FaceData<bool> marked(mesh, false);
+        geometry.requireFaceIndices();
+        for (Face f : mesh.faces()) {
+            if (marked[f]) continue;
+            marked[f] = true;
+            std::vector<Face> queue = {f};
+            size_t f0 = geometry.faceIndices[f];
+            Face curr;
+            while (!queue.empty()) {
+                curr = queue.back();
+                queue.pop_back();
+                for (Face g : curr.adjacentFaces()) {
+                    if (marked[g]) continue;
+                    triplets.emplace_back(m, geometry.faceIndices[g], -1);
+                    triplets.emplace_back(m, f0, 1);
+                    marked[g] = true;
+                    queue.push_back(g);
+                    m++;
+                }
+            }
+        }
+        geometry.unrequireFaceIndices();
+        A.resize(m, nFaces);
+        A.setFromTriplets(triplets.begin(), triplets.end());
+        SparseMatrix<double> Z(m, m);
+        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceCR, A.transpose()});
+        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
+        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
+        Vector<double> RHS = Vector<double>::Zero(nFaces + m);
+        RHS.head(nFaces) = div;
+        Vector<double> soln = solveSquare(LHS, RHS);
+        phi = soln.head(nFaces);
+        double shift = averageFaceDataOnSource(geometry, phi);
+        phi -= shift * Vector<double>::Ones(nFaces);
+    } else {
+        if (options.rebuild || poissonSolverCR == nullptr) {
+            if (VERBOSE) std::cerr << "\tFactorizing..." << std::endl;
+            poissonSolverCR.reset(new PositiveDefiniteSolver<double>(laplaceCR));
+        }
+        phi = poissonSolverCR->solve(div);
+        double shift = averageFaceDataOnSource(geometry, phi);
+        phi -= shift * Vector<double>::Ones(nFaces);
+    }
+
+    if (options.rebuild || projectionSolver == nullptr) {
+        massMat = buildCrouzeixRaviartMassMatrix();
+        avgMat = buildAveragingMatrix();
+        SparseMatrix<double> P = avgMat.transpose() * massMat * avgMat;
+        projectionSolver.reset(new SquareSolver<double>(P));
+    }
+    phi = projectOntoVertices(phi);
+
     geometry.unrequireFaceIndices();
 
-    return phi;
+    return -phi;
 }
 
 Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositionGeometry& pointGeom,
@@ -799,7 +882,7 @@ Eigen::Vector3d SignedHeatTetSolver::faceBarycenter(size_t fIdx) const {
  * should all be preserved. However, the faces of the bounding cube should be sufficiently refined from the first step
  * that the resulting tets are small enough and of similar size to the ones everywhere else.
  */
-void SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry) {
+bool SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry) {
 
     SurfaceMesh& mesh = geometry.mesh;
 
@@ -884,12 +967,14 @@ void SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry) {
         tetrahedralize(const_cast<char*>(TETFLAGS_PRESERVE.c_str()), &in, &out);
     } catch (const std::runtime_error& re) {
         std::cerr << "Runtime error: " << re.what() << std::endl;
+        return false;
     } catch (const std::exception& ex) {
         std::cerr << "Error occurred: " << ex.what() << std::endl;
+        return false;
     } catch (const int& x) {
         std::cerr << "TetGen error code: " << x << std::endl;
+        return false;
     }
-
     if (VERBOSE) std::cerr << "domain tet-meshed" << std::endl;
 
     // Get tet mesh info.
@@ -927,6 +1012,7 @@ void SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry) {
 
     // Display the tetmesh in the GUI.
     polyscope::VolumeMesh* psVolumeMesh = polyscope::registerTetMesh("domain", vertices, tets);
+    return true;
 }
 
 void SignedHeatTetSolver::tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom) {

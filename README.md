@@ -2,17 +2,15 @@
 
 C++ demo for "[A Heat Method for Generalized Signed Distance](https://nzfeng.github.io/research/SignedHeatMethod/index.html)" by [Nicole Feng](https://nzfeng.github.io/index.html) and [Keenan Crane](https://www.cs.cmu.edu/~kmcrane/), presented at SIGGRAPH 2024.
 
-Paper PDF (18.9mb): [link](https://nzfeng.github.io/research/SignedHeatMethod/SignedDistance.pdf)
-
 Project page with links to paper, pseudocode, supplementals, & videos: [link](https://nzfeng.github.io/research/SignedHeatMethod/index.html)
 
-SIGGRAPH talk (10 minutes): [link]()
+This Github repository demonstrates the _Signed Heat Method (SHM)_ on **3D volumetric domains**, solving for (generalized) signed distance to triangle meshes, polygon meshes, and point clouds. 
 
-This Github repository demonstrates the _Signed Heat Method (SHM)_ on **3D volumetric domains**, solving for (generalized) signed distance to triangle meshes, polygon meshes, and point clouds. For visualization, the solution is solved on a background tet mesh or grid, which you do _not_ need to supply yourself -- the program discretizes the domain for you, and you just need to supply the geometry to which you'd like the signed distance. 
+For visualization, the solution is solved on a background tet mesh or grid, which you do _not_ need to supply yourself -- the program discretizes the domain for you, and you just need to supply the geometry to which you'd like the signed distance. 
 
 If you're interested in using the Signed Heat Method in 2D surface domains, go to [this Github repository](https://github.com/nzfeng/signed-heat-demo) which demonstrates the [geometry-central implementation on (2D) surface meshes and point clouds](https://geometry-central.net/surface/algorithms/signed_heat_method/) .
 
-![teaser image](media/teaser.png)
+![teaser image](media/teaser.pdf)
 
 If this code contributes to academic work, please cite as:
 ```bibtex
@@ -37,7 +35,7 @@ If this code contributes to academic work, please cite as:
 
 ## Getting started
 
-This project uses [geometry-central](https://geometry-central.net) for mesh computations, [Tetgen](https://www.wias-berlin.de/software/tetgen/1.5/index.html) for tet mesh generation, [libigl](https://libigl.github.io/) for isosurface extraction, and [Polyscope](http://polyscope.run/) for visualization. These dependencies are added as git submodules, so copies will be downloaded locally when you clone this project as below.
+This project uses [geometry-central](https://geometry-central.net) for mesh computations, [Tetgen](https://www.wias-berlin.de/software/tetgen/1.5/index.html) for tet mesh generation, [Polyscope](http://polyscope.run/) for visualization, and [libigl](https://libigl.github.io/) for a marching tets implementation. These dependencies are added as git submodules, so copies will be downloaded locally when you clone this project as below.
 
 ```
 git clone --recursive https://github.com/nzfeng/signed-heat-3d.git
@@ -49,12 +47,16 @@ bin/main /path/to/mesh
 ```
 A Polyscope GUI will open.
 
+If you do not clone recursively, you may need to initialize/update submodules by running `git submodule update --init` or `git submodule update`.
+
 # Mesh & point cloud input
 
 ## File formats
 An input mesh may be an `obj`, `ply`, `off`, or `stl`. See [the geometry-central website](https://geometry-central.net/surface/utilities/io/#reading-meshes) for up-to-date information on supported file types.
 
 An input point cloud should be specified using point positions and normals. Some example files, with extension `.pc`, are in the `data` directory.
+
+The algorithm is robust to self-intersections, holes, and noise in the input geometry, and to a certain amount of inconsistent normal orientations.
 
 # Usage
 
@@ -67,6 +69,8 @@ In addition to the mesh file, you can pass several arguments to the command line
 |`--V`, `--verbose`| Verbose output. On by default|
 |`--h`| Controls the tet/grid spacing proportional to $2^{-h}$, with larger values indicating more refinement. Default value is 0.|
 |`--help`| Display help. |
+
+To improve performance, operators and spatial discretizations are only built as necessary, and re-used in future computations if the underlying discretization hasn't changed. This means future computations can be significantly faster than the initial solve (which includes, for example, tet mesh construction and matrix factorization.)
 
 # Performance
 

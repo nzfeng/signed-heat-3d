@@ -55,8 +55,8 @@ class SignedHeatTetSolver {
     std::unique_ptr<pointcloud::PointPositionGeometry> pointPolyGeom; // for polygon mesh
 
     // == solvers
-    SparseMatrix<double> laplaceMat, massMat, avgMat;
-    std::unique_ptr<PositiveDefiniteSolver<double>> poissonSolver;
+    SparseMatrix<double> laplaceMat, laplaceCR, massMat, avgMat;
+    std::unique_ptr<PositiveDefiniteSolver<double>> poissonSolver, poissonSolverCR;
     std::unique_ptr<SquareSolver<double>> projectionSolver;
 
     // == algorithm
@@ -64,6 +64,8 @@ class SignedHeatTetSolver {
                                         const SignedHeat3DOptions& options);
     Vector<double> integrateVectorField(pointcloud::PointPositionGeometry& pointGeom, const Eigen::MatrixXd& Yt,
                                         const SignedHeat3DOptions& options);
+    Vector<double> integrateVectorFieldToFaces(VertexPositionGeometry& geometry, const Eigen::MatrixXd& Yt,
+                                               const SignedHeat3DOptions& options);
     Vector<double> integrateVectorFieldGreedily(VertexPositionGeometry& geometry, const Eigen::MatrixXd& Yt,
                                                 const SignedHeat3DOptions& options);
     Vector<double> integrateVectorFieldGreedily(pointcloud::PointPositionGeometry& pointGeom, const Eigen::MatrixXd& Yt,
@@ -93,7 +95,7 @@ class SignedHeatTetSolver {
     //== tet-meshing
     std::string TET_PREFIX = "pq1.414zfenna"; // need -f, -e to output all faces, edges in tetmesh; -nn for adjacency
     std::string TETFLAGS, TETFLAGS_PRESERVE;
-    void tetmeshDomain(VertexPositionGeometry& geometry);
+    bool tetmeshDomain(VertexPositionGeometry& geometry);
     void tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom);
     void triangulateCube(tetgenio& cubeSurface, const Vector3& centroid, const double& radius, double scale = 2.) const;
     void tetmeshCube(tetgenio& in, tetgenio& out, const Vector3& centroid, const double& radius,

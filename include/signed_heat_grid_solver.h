@@ -37,6 +37,7 @@ class SignedHeatGridSolver {
     SparseMatrix<double> gradient() const;
     Vector<double> integrateGreedily(const Eigen::VectorXd& Yt);
     double evaluateFunction(const Vector<double>& u, const Vector3& q) const;
+    void trilinearCoefficients(const Vector3& q, std::vector<size_t>& nodeIndices, std::vector<double>& coeffs) const;
     double evaluateAverageAlongSourceGeometry(VertexPositionGeometry& geometry, const Vector<double>& u) const;
     double evaluateAverageAlongSourceGeometry(pointcloud::PointPositionGeometry& pointGeom,
                                               const Vector<double>& u) const;

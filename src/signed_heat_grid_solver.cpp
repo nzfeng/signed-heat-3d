@@ -23,7 +23,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         }
         nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
         // clang-format on
-        cellSize = 2. * s / nx;
+        cellSize = 2. * s / (nx - 1);
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
         laplaceMat = laplacian();
         if (VERBOSE) std::cerr << "Factorizing Laplacian..." << std::endl;
@@ -63,7 +63,6 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
             }
         }
     }
-    for (size_t i = 0; i < totalNodes; i++) Y.row(i) /= Y.row(i).norm();
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
     // Integrate gradient to get distance.
@@ -75,11 +74,35 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     if (options.fastIntegration) {
         phi = integrateGreedily(Y);
     } else {
-        if (options.rebuild || poissonSolver == nullptr) {
-            if (VERBOSE) std::cerr << "Factorizing Laplacian..." << std::endl;
-            poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
+        SparseMatrix<double> A;
+        size_t m = 0;
+        std::vector<size_t> nodeIndices;
+        std::vector<double> coeffs;
+        std::vector<bool> hasCellBeenUsed(totalNodes, false);
+        std::vector<Eigen::Triplet<double>> tripletList;
+        for (Face f : mesh.faces()) {
+            Vector3 b = barycenter(geometry, f);
+            Vector3 d = b - bboxMin;
+            size_t i = std::floor(b[0] / cellSize);
+            size_t j = std::floor(b[1] / cellSize);
+            size_t k = std::floor(b[2] / cellSize);
+            size_t nodeIdx = indicesToNodeIndex(i, j, k);
+            if (hasCellBeenUsed[nodeIdx]) continue;
+            trilinearCoefficients(b, nodeIndices, coeffs);
+            for (size_t i = 0; i < nodeIndices.size(); i++) tripletList.emplace_back(m, nodeIndices[i], coeffs[i]);
+            hasCellBeenUsed[nodeIdx] = true;
+            m++;
         }
-        phi = -poissonSolver->solve(divYt);
+        A.resize(m, totalNodes);
+        A.setFromTriplets(tripletList.begin(), tripletList.end());
+        SparseMatrix<double> Z(m, m);
+        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
+        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
+        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
+        Vector<double> RHS = Vector<double>::Zero(totalNodes + m);
+        RHS.head(totalNodes) = divYt;
+        Vector<double> soln = solveSquare(LHS, RHS);
+        phi = -soln.head(totalNodes);
     }
     double shift = evaluateAverageAlongSourceGeometry(geometry, phi);
     phi -= shift * Vector<double>::Ones(totalNodes);
@@ -108,7 +131,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         }
         nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
         // clang-format on
-        cellSize = 2. * s / nx;
+        cellSize = 2. * s / (nx - 1);
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
         laplaceMat = laplacian();
         t2 = high_resolution_clock::now();
@@ -157,11 +180,35 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
     if (options.fastIntegration) {
         phi = integrateGreedily(Y);
     } else {
-        if (options.rebuild || poissonSolver == nullptr) {
-            if (VERBOSE) std::cerr << "Factorizing Laplacian..." << std::endl;
-            poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
+        SparseMatrix<double> A;
+        size_t m = 0;
+        std::vector<size_t> nodeIndices;
+        std::vector<double> coeffs;
+        std::vector<bool> hasCellBeenUsed(totalNodes, false);
+        std::vector<Eigen::Triplet<double>> tripletList;
+        for (size_t pIdx = 0; pIdx < P; pIdx++) {
+            Vector3 b = pointGeom.positions[pIdx];
+            Vector3 d = b - bboxMin;
+            size_t i = std::floor(b[0] / cellSize);
+            size_t j = std::floor(b[1] / cellSize);
+            size_t k = std::floor(b[2] / cellSize);
+            size_t nodeIdx = indicesToNodeIndex(i, j, k);
+            if (hasCellBeenUsed[nodeIdx]) continue;
+            trilinearCoefficients(b, nodeIndices, coeffs);
+            for (size_t i = 0; i < nodeIndices.size(); i++) tripletList.emplace_back(m, nodeIndices[i], coeffs[i]);
+            hasCellBeenUsed[nodeIdx] = true;
+            m++;
         }
-        phi = -poissonSolver->solve(divYt);
+        A.resize(m, totalNodes);
+        A.setFromTriplets(tripletList.begin(), tripletList.end());
+        SparseMatrix<double> Z(m, m);
+        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
+        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
+        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
+        Vector<double> RHS = Vector<double>::Zero(totalNodes + m);
+        RHS.head(totalNodes) = divYt;
+        Vector<double> soln = solveSquare(LHS, RHS);
+        phi = -soln.head(totalNodes);
     }
     double shift = evaluateAverageAlongSourceGeometry(pointGeom, phi);
     phi -= shift * Vector<double>::Ones(totalNodes);
@@ -245,7 +292,7 @@ SparseMatrix<double> SignedHeatGridSolver::laplacian() const {
                 size_t prevY = indicesToNodeIndex(i, j - 1, k);
                 size_t prevZ = indicesToNodeIndex(i, j, k - 1);
 
-                // Use mirroring for differences along boundary. This means the Laplacian will just be zero here.
+                // Use mirroring for differences along boundary.
                 if (i == nx - 1) {
                     nextX = currIdx;
                     currX = indicesToNodeIndex(i - 1, j, k);
@@ -380,6 +427,39 @@ double SignedHeatGridSolver::evaluateFunction(const Vector<double>& u, const Vec
     return v;
 }
 
+void SignedHeatGridSolver::trilinearCoefficients(const Vector3& q, std::vector<size_t>& nodeIndices,
+                                                 std::vector<double>& coeffs) const {
+
+    double h = cellSize;
+    Vector3 d = q - bboxMin;
+    size_t i = std::floor(d[0] / h);
+    size_t j = std::floor(d[1] / h);
+    size_t k = std::floor(d[2] / h);
+    Vector3 p000 = indicesToNodePosition(i, j, k);
+    size_t i000 = indicesToNodeIndex(i, j, k);
+    size_t i100 = indicesToNodeIndex(i + 1, j, k);
+    size_t i010 = indicesToNodeIndex(i, j + 1, k);
+    size_t i001 = indicesToNodeIndex(i, j, k + 1);
+    size_t i110 = indicesToNodeIndex(i + 1, j + 1, k);
+    size_t i101 = indicesToNodeIndex(i + 1, j, k + 1);
+    size_t i011 = indicesToNodeIndex(i, j + 1, k + 1);
+    size_t i111 = indicesToNodeIndex(i + 1, j + 1, k + 1);
+    nodeIndices = {i000, i100, i010, i001, i110, i101, i011, i111};
+    double tx = (q[0] - p000[0]) / h;
+    double ty = (q[1] - p000[1]) / h;
+    double tz = (q[2] - p000[2]) / h;
+    coeffs = {
+        (1. - tx) * (1. - ty) * (1. - tz), // 000
+        tx * (1. - ty) * (1. - tz),        // 100
+        (1. - tx) * ty * (1. - tz),        // 010
+        (1. - tx) * (1. - ty) * tz,        // 001
+        tx * ty * (1. - tz),               // 110
+        tx * (1. - ty) * tz,               // 101
+        (1. - tx) * ty * tz,               // 011
+        tx * ty * tz                       // 111
+    };
+}
+
 double SignedHeatGridSolver::evaluateAverageAlongSourceGeometry(VertexPositionGeometry& geometry,
                                                                 const Vector<double>& u) const {
 
@@ -420,8 +500,8 @@ Vector3 SignedHeatGridSolver::barycenter(VertexPositionGeometry& geometry, const
 }
 
 size_t SignedHeatGridSolver::indicesToNodeIndex(const size_t& i, const size_t& j, const size_t& k) const {
-    // This is the opposite order I would have expected from Polyscope
-    return i * (ny * nz) + j * nz + k;
+    // return i * (ny * nz) + j * nz + k;
+    return i + j * ny + k * (nx * ny);
 }
 
 Vector3 SignedHeatGridSolver::indicesToNodePosition(const size_t& i, const size_t& j, const size_t& k) const {

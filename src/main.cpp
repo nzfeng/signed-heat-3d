@@ -83,7 +83,7 @@ void solve() {
             ->setColorMap(cmapName)
             ->setIsolinesEnabled(true)
             ->setEnabled(true);
-        polyscope::getVolumeMesh("domain")->setCullWholeElements(false);
+        polyscope::getVolumeMesh("domain")->setCullWholeElements(true);
     } else if (MESH_MODE == MeshMode::Grid) {
         t1 = high_resolution_clock::now();
         PHI = (INPUT_MODE == InputMode::Mesh) ? gridSolver->computeDistance(*geometry, SHM_OPTIONS)
@@ -137,11 +137,14 @@ void callback() {
     ImGui::Text("Solve options");
     ImGui::Separator();
     ImGui::Checkbox("Use fast integration", &SHM_OPTIONS.fastIntegration);
+    if (MESH_MODE == MeshMode::Tet && mesh != nullptr && mesh->isTriangular()) {
+        ImGui::Checkbox("Use Crouzeix-Raviart", &SHM_OPTIONS.useCrouzeixRaviart);
+    }
     ImGui::InputFloat("tCoef (diffusion time)", &TCOEF);
     if (ImGui::InputFloat("hCoef (mesh spacing)", &HCOEF)) {
         SHM_OPTIONS.rebuild = true;
     }
-    if (MESH_MODE != MeshMode::Grid || (mesh == nullptr && mesh->isTriangular())) {
+    if (MESH_MODE != MeshMode::Grid) {
         ImGui::RadioButton("Constrain zero set", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::ZeroSet));
         ImGui::RadioButton("Constrain multiple levelsets", &CONSTRAINT_MODE,
                            static_cast<int>(LevelSetConstraint::Multiple));
