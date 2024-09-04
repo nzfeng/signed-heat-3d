@@ -7,3 +7,6 @@
 [submodule "deps/libigl"]
 	path = deps/libigl
 	url = https://github.com/libigl/libigl
+[submodule "deps/geometry-central"]
+	path = deps/geometry-central
+	url = git@github.com:nmwsharp/geometry-central.git
