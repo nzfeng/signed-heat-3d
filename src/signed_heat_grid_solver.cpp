@@ -86,9 +86,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         for (Face f : mesh.faces()) {
             Vector3 b = barycenter(geometry, f);
             Vector3 d = b - bboxMin;
-            size_t i = std::floor(b[0] / cellSize);
-            size_t j = std::floor(b[1] / cellSize);
-            size_t k = std::floor(b[2] / cellSize);
+            size_t i = std::floor(d[0] / cellSize);
+            size_t j = std::floor(d[1] / cellSize);
+            size_t k = std::floor(d[2] / cellSize);
             size_t nodeIdx = indicesToNodeIndex(i, j, k);
             if (hasCellBeenUsed[nodeIdx]) continue;
             trilinearCoefficients(b, nodeIndices, coeffs);
@@ -192,9 +192,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         for (size_t pIdx = 0; pIdx < P; pIdx++) {
             Vector3 b = pointGeom.positions[pIdx];
             Vector3 d = b - bboxMin;
-            size_t i = std::floor(b[0] / cellSize);
-            size_t j = std::floor(b[1] / cellSize);
-            size_t k = std::floor(b[2] / cellSize);
+            size_t i = std::floor(d[0] / cellSize);
+            size_t j = std::floor(d[1] / cellSize);
+            size_t k = std::floor(d[2] / cellSize);
             size_t nodeIdx = indicesToNodeIndex(i, j, k);
             if (hasCellBeenUsed[nodeIdx]) continue;
             trilinearCoefficients(b, nodeIndices, coeffs);
