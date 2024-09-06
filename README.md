@@ -39,7 +39,7 @@ This project uses [geometry-central](https://geometry-central.net) for mesh comp
 
 ```
 git clone --recursive https://github.com/nzfeng/signed-heat-3d.git
-cd SHM
+cd signed-heat-3d
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release .. # use `Debug` mode to enable checks
 make -j8 # or however many cores you want to use
@@ -47,7 +47,7 @@ bin/main /path/to/mesh
 ```
 A Polyscope GUI will open.
 
-If you do not clone recursively, you may need to initialize/update submodules by running `git submodule update --init --recursive` or `git submodule update --recursive`.
+If you do not clone recursively, some submodules or sub-submodules will not clone. Initialize/update these submodules by running `git submodule update --init --recursive` or `git submodule update --recursive`.
 
 # Mesh & point cloud input
 
@@ -76,7 +76,7 @@ To improve performance, operators and spatial discretizations are only built as 
 
 There is no acceleration is applied in this program, even though there are several obvious areas of performance improvement.
 
-In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution; the integral is evaluted simply by direct summation, even though Step 1 is trivially parallelizable. 
+In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution; the integral is evaluted simply by direct summation, even though this summation is trivially parallelizable. 
 
 One could also optimize loop order when iterating over source/domain elements (whichever is smaller) for better cache behavior.
 
