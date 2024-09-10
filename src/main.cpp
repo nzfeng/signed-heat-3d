@@ -63,6 +63,7 @@ std::string OUTPUT_DIR = "../export";
 std::string OUTPUT_FILENAME;
 int LAST_SOLVER_MODE;
 bool VERBOSE = true;
+bool CONTOURED = false;
 
 void solve() {
 
@@ -122,6 +123,7 @@ void contour() {
         gridScalarQ->setSlicePlanesAffectIsosurface(false);
         gridScalarQ->registerIsosurfaceAsMesh("isosurface");
     }
+    CONTOURED = true;
     polyscope::getSurfaceMesh("isosurface")->setIgnoreSlicePlane(psPlane->name, true);
 }
 
@@ -161,27 +163,32 @@ void callback() {
         if (ImGui::InputFloat("Contour (enter value)", &ISOVAL)) {
             contour();
         }
-        if (ImGui::Button("Export isosurface")) {
-            if (LAST_SOLVER_MODE == MeshMode::Grid) {
-                // register geometry-central mesh from Polyscope one
-                polyscope::SurfaceMesh* psIsoMesh = polyscope::getSurfaceMesh("isosurface");
-                std::vector<std::vector<size_t>> polygons;
-                std::vector<Vector3> positions;
-                for (size_t i = 0; i < psIsoMesh->nFacesTriangulation(); i++) {
-                    std::vector<size_t> face;
-                    for (int j = 0; j < 3; j++) face[j] = psIsoMesh->triangleFaceInds.getValue(3 * i + j);
-                    polygons.push_back(face);
+        if (CONTOURED) {
+            if (ImGui::Button("Export isosurface")) {
+                if (LAST_SOLVER_MODE == MeshMode::Grid) {
+                    // register geometry-central mesh from Polyscope one
+                    polyscope::SurfaceMesh* psIsoMesh = polyscope::getSurfaceMesh("isosurface");
+
+                    std::vector<std::vector<size_t>> polygons;
+                    std::vector<Vector3> positions;
+                    for (size_t i = 0; i < psIsoMesh->nFacesTriangulation(); i++) {
+                        std::vector<size_t> face(3);
+                        for (int j = 0; j < 3; j++) {
+                            face[j] = psIsoMesh->triangleVertexInds.getValue(3 * i + j);
+                        }
+                        polygons.push_back(face);
+                    }
+                    for (size_t i = 0; i < psIsoMesh->nVertices(); i++) {
+                        Vector3 p;
+                        for (int j = 0; j < 3; j++) p[j] = psIsoMesh->vertexPositions.getValue(i)[j];
+                        positions.push_back(p);
+                    }
+                    std::tie(isoMesh, isoGeom) = makeSurfaceMeshAndGeometry(polygons, positions);
                 }
-                for (size_t i = 0; i < psIsoMesh->nVertices(); i++) {
-                    Vector3 p;
-                    for (int j = 0; j < 3; j++) p[j] = psIsoMesh->vertexPositions.getValue(i)[j];
-                    positions.push_back(p);
-                }
-                std::tie(isoMesh, isoGeom) = makeSurfaceMeshAndGeometry(polygons, positions);
+                std::string isoFilename = OUTPUT_DIR + "/isosurface.obj";
+                writeSurfaceMesh(*isoMesh, *isoGeom, isoFilename);
+                std::cerr << "Isosurface written to " << isoFilename << std::endl;
             }
-            std::string isoFilename = OUTPUT_DIR + "/isosurface.obj";
-            writeSurfaceMesh(*isoMesh, *isoGeom, isoFilename);
-            std::cerr << "Isosurface written to " << isoFilename << std::endl;
         }
     }
 }
