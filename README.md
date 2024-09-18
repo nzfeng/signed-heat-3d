@@ -66,7 +66,7 @@ In addition to the mesh file, you can pass several arguments to the command line
 | ------------- |-------------|
 |`--g`, `--grid`| Solve on a background grid. By default, the domain will be discretized as a tet mesh. |
 |`--f`, `--fast`| Solve using a less accurate, but faster, method of integration. |
-|`--V`, `--verbose`| Verbose output. On by default.|
+|`--V`, `--verbose`| Verbose output. Off by default.|
 |`--h`| Controls the tet/grid spacing proportional to $2^{-h}$, with larger values indicating more refinement. Default value is 0.|
 |`--help`| Display help. |
 
@@ -74,13 +74,11 @@ To improve performance, operators and spatial discretizations are only built as 
 
 # Performance
 
-There is no acceleration is applied in this program, even though there are several obvious areas of performance improvement.
+There is no acceleration is applied in this program, even though there are several obvious areas of performance improvement:
 
-In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution; the integral is evaluted simply by direct summation, even though this summation is trivially parallelizable. 
-
-One could also optimize loop order when iterating over source/domain elements (whichever is smaller) for better cache behavior.
-
-More performance-critical implementations could also implement hierarchical summation.
+* In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution; the integral is evaluted simply by direct summation, even though this summation is trivially parallelizable. 
+* One could also optimize loop order when iterating over source/domain elements (whichever is smaller) for better cache behavior.
+* More performance-critical implementations could also implement hierarchical summation.
 
 # Output
 
