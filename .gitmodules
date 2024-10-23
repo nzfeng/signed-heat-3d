@@ -9,4 +9,4 @@
 	url = https://github.com/libigl/libigl
 [submodule "deps/geometry-central"]
 	path = deps/geometry-central
-	url = git@github.com:nmwsharp/geometry-central.git
+	url = https://github.com/nmwsharp/geometry-central.git
