@@ -28,12 +28,12 @@ class SignedHeatGridSolver {
 
     double shortTime, cellSize;
 
-    SparseMatrix<double> laplaceMat;
+    Eigen::SparseMatrix<double, Eigen::RowMajor> laplaceMat;
     FaceData<double> faceAreas;    // of the source geometry
     FaceData<Vector3> faceNormals; // of the source geometry
 
-    SparseMatrix<double> laplacian() const;
-    SparseMatrix<double> gradient() const;
+    Eigen::SparseMatrix<double, Eigen::RowMajor> laplacian() const;
+    Eigen::SparseMatrix<double, Eigen::RowMajor> gradient() const;
     Vector<double> integrateGreedily(const Eigen::VectorXd& Yt);
     double evaluateFunction(const Vector<double>& u, const Vector3& q) const;
     void trilinearCoefficients(const Vector3& q, std::vector<size_t>& nodeIndices, std::vector<double>& coeffs) const;

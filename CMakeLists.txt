@@ -72,6 +72,7 @@ endif()
 add_subdirectory(deps/geometry-central)
 add_subdirectory(deps/polyscope)
 add_subdirectory(deps/tetgen)
+add_subdirectory(deps/amgcl)
 
 # == Build our project stuff
 
@@ -88,7 +89,7 @@ target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/tetgen/
 
 # add the args.hxx project which we use for command line args
 target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/polyscope/deps/args")
-target_link_libraries(main geometry-central polyscope tetgen)
+target_link_libraries(main geometry-central polyscope tetgen amgcl::amgcl)
 
 # Add libIGL in header-only mode.
 target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/libigl/include")

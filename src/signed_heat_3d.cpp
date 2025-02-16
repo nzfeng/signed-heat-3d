@@ -87,3 +87,36 @@ void setFaceVectorAreas(VertexPositionGeometry& geometry, FaceData<double>& area
         normals[f] = N / areas[f];
     }
 }
+
+Vector<double> AMGCL_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor>& LHS, const Vector<double>& RHS,
+                           bool verbose) {
+
+    typedef amgcl::backend::eigen<double> Backend;
+    typedef amgcl::make_solver<
+        // Use AMG as preconditioner:
+        amgcl::amg<Backend, amgcl::coarsening::smoothed_aggregation, amgcl::relaxation::spai0>,
+        // TODO: CPR for block-structured matrices
+        // template <class Backend, template <class> class Coarsening, template <class> class Relax>,
+        // amgcl::amg<PPrecond, class SPrecond> class amgcl::preconditioner::cpr,
+        // Set iterative solver:
+        amgcl::solver::bicgstab<Backend>>
+        Solver;
+
+    Solver solve(LHS);
+    // struct params {
+    //     typename Precond::params precond;
+    //     typename Solver::params solver;
+    // };
+    // Solver::params prm;
+    // prm.solver.tol = 1e-8;
+    // prm.solver.maxiter = 1000;
+    // Solver solve(LHS, prm);
+
+    int iters;
+    double error;
+    size_t n = LHS.rows();
+    Vector<double> x(n);
+    std::tie(iters, error) = solve(LHS, RHS, x);
+    if (verbose) std::cerr << "AMGCL # iters: " << iters << "\tAMGCL residual: " << error << std::endl;
+    return x;
+}

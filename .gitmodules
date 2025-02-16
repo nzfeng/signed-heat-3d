@@ -10,3 +10,6 @@
 [submodule "deps/geometry-central"]
 	path = deps/geometry-central
 	url = https://github.com/nmwsharp/geometry-central.git
+[submodule "deps/amgcl"]
+	path = deps/amgcl
+	url = git@github.com:ddemidov/amgcl.git

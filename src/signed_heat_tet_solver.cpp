@@ -181,7 +181,7 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
     } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
         // Determine the connected components of the mesh. Do simple depth-first search.
         std::vector<Eigen::Triplet<double>> triplets;
-        SparseMatrix<double> A;
+        Eigen::SparseMatrix<double, Eigen::RowMajor> A;
         size_t m = 0;
         size_t V = mesh.nVertices();
         VertexData<bool> marked(mesh, false);
@@ -208,10 +208,10 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         geometry.unrequireVertexIndices();
         A.resize(m, nVertices);
         A.setFromTriplets(triplets.begin(), triplets.end());
-        SparseMatrix<double> Z(m, m);
-        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
-        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
-        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
+        Eigen::SparseMatrix<double, Eigen::RowMajor> Z(m, m);
+        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
+        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS2 = horizontalStack<double>({A, Z});
+        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(nVertices + m);
         RHS.head(nVertices) = div;
         Vector<double> soln = solveSquare(LHS, RHS);
@@ -256,7 +256,7 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
     } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
         // Determine the connected components of the mesh. Do simple depth-first search.
         std::vector<Eigen::Triplet<double>> triplets;
-        SparseMatrix<double> A;
+        Eigen::SparseMatrix<double, Eigen::RowMajor> A;
         size_t m = 0;
         size_t F = mesh.nFaces();
         FaceData<bool> marked(mesh, false);
@@ -283,10 +283,10 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         geometry.unrequireFaceIndices();
         A.resize(m, nFaces);
         A.setFromTriplets(triplets.begin(), triplets.end());
-        SparseMatrix<double> Z(m, m);
-        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceCR, A.transpose()});
-        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
-        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
+        Eigen::SparseMatrix<double, Eigen::RowMajor> Z(m, m);
+        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS1 = horizontalStack<double>({laplaceCR, A.transpose()});
+        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS2 = horizontalStack<double>({A, Z});
+        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(nFaces + m);
         RHS.head(nFaces) = div;
         Vector<double> soln = solveSquare(LHS, RHS);
@@ -306,7 +306,7 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
     if (options.rebuild || projectionSolver == nullptr) {
         massMat = buildCrouzeixRaviartMassMatrix();
         avgMat = buildAveragingMatrix();
-        SparseMatrix<double> P = avgMat.transpose() * massMat * avgMat;
+        Eigen::SparseMatrix<double, Eigen::RowMajor> P = avgMat.transpose() * massMat * avgMat;
         projectionSolver.reset(new SquareSolver<double>(P));
     }
     phi = projectOntoVertices(phi);
@@ -352,7 +352,7 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
         case (LevelSetConstraint::Multiple): {
             Vector<double> div = vertexDivergence(Yt);
             std::vector<Eigen::Triplet<double>> triplets;
-            SparseMatrix<double> A;
+            Eigen::SparseMatrix<double, Eigen::RowMajor> A;
             size_t m = 0;
             size_t P = pointGeom.cloud.nPoints();
             VertexData<bool> marked(pointGeom.tuftedGeom->mesh, Vector<bool>::Zero(P));
@@ -379,10 +379,10 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             pointGeom.tuftedGeom->unrequireVertexIndices();
             A.resize(m, nVertices);
             A.setFromTriplets(triplets.begin(), triplets.end());
-            SparseMatrix<double> Z(m, m);
-            SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
-            SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
-            SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
+            Eigen::SparseMatrix<double, Eigen::RowMajor> Z(m, m);
+            Eigen::SparseMatrix<double, Eigen::RowMajor> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
+            Eigen::SparseMatrix<double, Eigen::RowMajor> LHS2 = horizontalStack<double>({A, Z});
+            Eigen::SparseMatrix<double, Eigen::RowMajor> LHS = verticalStack<double>({LHS1, LHS2});
             Vector<double> RHS = Vector<double>::Zero(nVertices + m);
             RHS.head(nVertices) = div;
             // shiftDiagonal(LHS, 1e-16);
@@ -620,9 +620,9 @@ Vector<double> SignedHeatTetSolver::faceDivergence(const Eigen::MatrixXd& X) con
     return divX;
 }
 
-SparseMatrix<double> SignedHeatTetSolver::buildCrouzeixRaviartLaplacian() const {
+Eigen::SparseMatrix<double, Eigen::RowMajor> SignedHeatTetSolver::buildCrouzeixRaviartLaplacian() const {
 
-    SparseMatrix<double> L(nFaces, nFaces);
+    Eigen::SparseMatrix<double, Eigen::RowMajor> L(nFaces, nFaces);
     std::vector<Eigen::Triplet<double>> triplets;
     for (size_t i = 0; i < nTets; i++) {
         double vol = computeTetVolume(i);
@@ -647,9 +647,9 @@ SparseMatrix<double> SignedHeatTetSolver::buildCrouzeixRaviartLaplacian() const 
     return L;
 }
 
-SparseMatrix<double> SignedHeatTetSolver::buildCrouzeixRaviartMassMatrix() const {
+Eigen::SparseMatrix<double, Eigen::RowMajor> SignedHeatTetSolver::buildCrouzeixRaviartMassMatrix() const {
 
-    SparseMatrix<double> M(nFaces, nFaces);
+    Eigen::SparseMatrix<double, Eigen::RowMajor> M(nFaces, nFaces);
     std::vector<Eigen::Triplet<double>> triplets;
     for (size_t i = 0; i < nTets; i++) {
         double vol = computeTetVolume(i);
@@ -707,9 +707,9 @@ void faceCircumcenter(const Eigen::Vector3d& a, const Eigen::Vector3d& b, const 
  * Build the dual Laplacian for the tet mesh from Alexa et al. 2020 (https://igl.ethz.ch/projects/LB3D/LB3D.pdf).
  * Code from [https://igl.ethz.ch/projects/LB3D/dualLaplace.cpp]
  */
-SparseMatrix<double> SignedHeatTetSolver::dualLaplacian() const {
+Eigen::SparseMatrix<double, Eigen::RowMajor> SignedHeatTetSolver::dualLaplacian() const {
 
-    SparseMatrix<double> L(nVertices, nVertices);
+    Eigen::SparseMatrix<double, Eigen::RowMajor> L(nVertices, nVertices);
 
     const int turn[4][4]{{-1, 2, 3, 1}, {3, -1, 0, 2}, {1, 3, -1, 0}, {2, 0, 1, -1}};
 
@@ -789,15 +789,15 @@ Vector<double> SignedHeatTetSolver::vertexDivergence(const Eigen::MatrixXd& X) c
 
 Vector<double> SignedHeatTetSolver::projectOntoVertices(const Vector<double>& u) const {
 
-    SparseMatrix<double> At = avgMat.transpose();
+    Eigen::SparseMatrix<double, Eigen::RowMajor> At = avgMat.transpose();
     Vector<double> RHS = At * massMat * u;
     Vector<double> w = projectionSolver->solve(RHS);
     return w;
 }
 
-SparseMatrix<double> SignedHeatTetSolver::buildAveragingMatrix() const {
+Eigen::SparseMatrix<double, Eigen::RowMajor> SignedHeatTetSolver::buildAveragingMatrix() const {
 
-    SparseMatrix<double> A(nFaces, nVertices);
+    Eigen::SparseMatrix<double, Eigen::RowMajor> A(nFaces, nVertices);
     std::vector<Eigen::Triplet<double>> triplets;
     double w = 1. / 3.;
     for (size_t i = 0; i < nFaces; i++) {
@@ -816,7 +816,7 @@ void SignedHeatTetSolver::isosurface(std::unique_ptr<SurfaceMesh>& isoMesh,
     Eigen::MatrixXd SV;
     Eigen::MatrixXi SF;
     Eigen::VectorXi J;
-    Eigen::SparseMatrix<double> BC;
+    Eigen::Eigen::SparseMatrix<double, Eigen::RowMajor> BC;
     igl::marching_tets(vertices, tets, phi, isoval, SV, SF, J, BC);
     std::tie(isoMesh, isoGeom) = makeSurfaceMeshAndGeometry(SV, SF);
 }

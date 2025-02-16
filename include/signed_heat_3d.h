@@ -14,6 +14,18 @@ using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 
+#include <amgcl/adapter/eigen.hpp>
+#include <amgcl/amg.hpp>
+#include <amgcl/backend/eigen.hpp>
+#include <amgcl/coarsening/smoothed_aggregation.hpp>
+#include <amgcl/make_solver.hpp>
+#include <amgcl/preconditioner/cpr.hpp>
+#include <amgcl/profiler.hpp>
+#include <amgcl/relaxation/as_preconditioner.hpp>
+#include <amgcl/relaxation/spai0.hpp>
+#include <amgcl/solver/bicgstab.hpp>
+#include <amgcl/solver/cg.hpp>
+
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
 
@@ -36,3 +48,5 @@ double radius(pointcloud::PointPositionGeometry& pointGeom, const Vector3& c);
 double yukawaPotential(const Vector3& x, const Vector3& y, const double& shortTime);
 double meanEdgeLength(IntrinsicGeometryInterface& geom);
 void setFaceVectorAreas(VertexPositionGeometry& geometry, FaceData<double>& areas, FaceData<Vector3>& normals);
+Vector<double> AMGCL_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor>& LHS, const Vector<double>& RHS,
+                           bool verbose = false);
