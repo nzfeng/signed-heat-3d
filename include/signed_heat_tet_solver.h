@@ -55,7 +55,7 @@ class SignedHeatTetSolver {
     std::unique_ptr<pointcloud::PointPositionGeometry> pointPolyGeom; // for polygon mesh
 
     // == solvers
-    Eigen::SparseMatrix<double, Eigen::RowMajor> laplaceMat, laplaceCR, massMat, avgMat;
+    SparseMatrix<double> laplaceMat, laplaceCR, massMat, avgMat;
     std::unique_ptr<PositiveDefiniteSolver<double>> poissonSolver, poissonSolverCR;
     std::unique_ptr<SquareSolver<double>> projectionSolver;
 
@@ -73,13 +73,13 @@ class SignedHeatTetSolver {
     void integrateGreedily(const Eigen::MatrixXd& Yt, Vector<bool>& visited, Vector<double>& phi) const;
     Vector<double> integrateGreedilyMultipleLevelSets(IntrinsicGeometryInterface& geometry,
                                                       const Eigen::MatrixXd& Yt) const;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> buildCrouzeixRaviartLaplacian() const;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> buildCrouzeixRaviartMassMatrix() const;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> dualLaplacian() const;
+    SparseMatrix<double> buildCrouzeixRaviartLaplacian() const;
+    SparseMatrix<double> buildCrouzeixRaviartMassMatrix() const;
+    SparseMatrix<double> dualLaplacian() const;
     Vector<double> faceDivergence(const Eigen::MatrixXd& X) const;
     Vector<double> vertexDivergence(const Eigen::MatrixXd& X) const;
     Vector<double> projectOntoVertices(const Vector<double>& u) const;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> buildAveragingMatrix() const;
+    SparseMatrix<double> buildAveragingMatrix() const;
     double averageFaceDataOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const;
     double averageVertexDataOnSource(VertexPositionGeometry& geometry, const Vector<double>& phi) const;
     double averageVertexDataOnSource(pointcloud::PointPositionGeometry& pointGeom, const Vector<double>& phi) const;

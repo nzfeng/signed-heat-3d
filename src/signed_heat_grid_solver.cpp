@@ -210,6 +210,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         Vector<double> RHS = Vector<double>::Zero(totalNodes + m);
         RHS.head(totalNodes) = divYt;
         Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
+        // Vector<double> soln = AMGCL_blockSolve(laplaceMat, A, Z, divYt, VERBOSE);
         phi = -soln.head(totalNodes);
     }
     double shift = evaluateAverageAlongSourceGeometry(pointGeom, phi);
