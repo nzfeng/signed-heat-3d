@@ -29,6 +29,8 @@ using std::chrono::milliseconds;
 #include <amgcl/solver/cg.hpp>
 #include <amgcl/solver/runtime.hpp>
 
+#include <pthread.h>
+
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
 

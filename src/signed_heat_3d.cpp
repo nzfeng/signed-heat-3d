@@ -99,7 +99,10 @@ Vector<double> AMGCL_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor>& L
         // Set iterative solver:
         amgcl::solver::bicgstab<Backend>>
         Solver;
-    Solver solve(LHS);
+    Solver::params prm;
+    // prm.solver.tol = 1e-5;
+    // prm.solver.maxiter = 100;
+    Solver solve(LHS, prm);
 
     int iters;
     double error;

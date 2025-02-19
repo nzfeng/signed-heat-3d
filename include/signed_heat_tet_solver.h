@@ -30,6 +30,9 @@ class SignedHeatTetSolver {
     void isosurface(std::unique_ptr<SurfaceMesh>& isoMesh, std::unique_ptr<VertexPositionGeometry>& isoGeom,
                     const Vector<double>& phi, double isoval = 0.) const;
 
+    void threadSum(int id, VertexPositionGeometry& geometry);
+    void threadSum(int id, pointcloud::PointPositionNormalGeometry& pointGeom);
+
     bool VERBOSE = true;
 
   private:
@@ -48,6 +51,9 @@ class SignedHeatTetSolver {
 
     double meanNodeSpacing;
     double shortTime;
+
+    size_t nThreads = 1;
+    Eigen::MatrixXd Yt;
 
     FaceData<double> surfaceFaceAreas;    // of the source geometry
     FaceData<Vector3> surfaceFaceNormals; // of the source geometry

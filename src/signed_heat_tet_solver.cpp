@@ -2,6 +2,79 @@
 
 SignedHeatTetSolver::SignedHeatTetSolver() {}
 
+struct threadArg {
+    int id;
+    SignedHeatTetSolver* tetSolver;
+    VertexPositionGeometry* geometry = nullptr;
+    pointcloud::PointPositionNormalGeometry* pointGeom = nullptr;
+};
+
+void* staticThreadSum(void* arg) {
+
+    threadArg* threadData = (threadArg*)arg;
+    if (threadData->geometry != nullptr) {
+        static_cast<SignedHeatTetSolver*>(threadData->tetSolver)->threadSum(threadData->id, *(threadData->geometry));
+    } else {
+        static_cast<SignedHeatTetSolver*>(threadData->tetSolver)->threadSum(threadData->id, *(threadData->pointGeom));
+    }
+    return NULL;
+};
+
+void SignedHeatTetSolver::threadSum(int id, VertexPositionGeometry& geometry) {
+
+    double lambda = std::sqrt(1. / shortTime);
+    SurfaceMesh& mesh = geometry.mesh;
+    size_t F = mesh.nFaces();
+
+    size_t incr = std::floor(nTets / nThreads);
+    size_t start = id * incr;
+    size_t end = (id < nThreads - 1) ? (id + 1) * incr : nTets;
+
+    // Integrate contributions (single-point quadrature)
+    for (size_t i = start; i < end; i++) {
+        // Compute query point.
+        Vector3 q = {0, 0, 0};
+        for (int j = 0; j < 4; j++) {
+            for (int k = 0; k < 3; k++) q[k] += vertices(tets(i, j), k);
+        }
+        q /= 4.;
+        // Integrate contributions (single-point quadrature)
+        Vector3 X = {0, 0, 0};
+        for (Face f : mesh.faces()) {
+            Vector3 p = {0, 0, 0};
+            for (Vertex v : f.adjacentVertices()) p += geometry.vertexPositions[v];
+            p /= f.degree();
+            Vector3 n = surfaceFaceNormals[f];
+            X += yukawaPotential(p, q, lambda) * n * surfaceFaceAreas[f];
+        }
+        X /= X.norm();
+        for (int j = 0; j < 3; j++) Yt(i, j) = X[j];
+    }
+}
+
+void SignedHeatTetSolver::threadSum(int id, pointcloud::PointPositionNormalGeometry& pointGeom) {
+
+    size_t P = pointGeom.cloud.nPoints();
+    double lambda = std::sqrt(1. / shortTime);
+    for (size_t i = 0; i < nTets; i++) {
+        // Compute query point.
+        Vector3 q = {0, 0, 0};
+        for (int j = 0; j < 4; j++) {
+            for (int k = 0; k < 3; k++) q[k] += vertices(tets(i, j), k);
+        }
+        q /= 4.;
+        // Integrate contributions.
+        Vector3 X = {0, 0, 0};
+        for (size_t pIdx = 0; pIdx < P; pIdx++) {
+            Vector3 p = pointGeom.positions[pIdx];
+            Vector3 n = pointGeom.normals[pIdx];
+            X += yukawaPotential(p, q, lambda) * n * pointGeom.tuftedGeom->vertexDualAreas[pIdx];
+        }
+        X /= X.norm();
+        for (int j = 0; j < 3; j++) Yt(i, j) = X[j];
+    }
+}
+
 // =============== ALGORITHM
 
 Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geometry,
@@ -46,29 +119,41 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
     }
 
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
-    Eigen::MatrixXd Yt = Eigen::MatrixXd::Zero(nTets, 3);
-    double lambda = std::sqrt(1. / shortTime);
-    SurfaceMesh& mesh = geometry.mesh;
-    size_t F = mesh.nFaces();
-    // Integrate contributions (single-point quadrature)
-    for (size_t i = 0; i < nTets; i++) {
-        // Compute query point.
-        Vector3 q = {0, 0, 0};
-        for (int j = 0; j < 4; j++) {
-            for (int k = 0; k < 3; k++) q[k] += vertices(tets(i, j), k);
-        }
-        q /= 4.;
-        // Integrate contributions (single-point quadrature)
-        Vector3 X = {0, 0, 0};
-        for (Face f : mesh.faces()) {
-            Vector3 p = {0, 0, 0};
-            for (Vertex v : f.adjacentVertices()) p += geometry.vertexPositions[v];
-            p /= f.degree();
-            Vector3 n = surfaceFaceNormals[f];
-            X += yukawaPotential(p, q, lambda) * n * surfaceFaceAreas[f];
-        }
-        X /= X.norm();
-        for (int j = 0; j < 3; j++) Yt(i, j) = X[j];
+    Yt = Eigen::MatrixXd::Zero(nTets, 3);
+    // double lambda = std::sqrt(1. / shortTime);
+    // SurfaceMesh& mesh = geometry.mesh;
+    // size_t F = mesh.nFaces();
+    // // Integrate contributions (single-point quadrature)
+    // for (size_t i = 0; i < nTets; i++) {
+    //     // Compute query point.
+    //     Vector3 q = {0, 0, 0};
+    //     for (int j = 0; j < 4; j++) {
+    //         for (int k = 0; k < 3; k++) q[k] += vertices(tets(i, j), k);
+    //     }
+    //     q /= 4.;
+    //     // Integrate contributions (single-point quadrature)
+    //     Vector3 X = {0, 0, 0};
+    //     for (Face f : mesh.faces()) {
+    //         Vector3 p = {0, 0, 0};
+    //         for (Vertex v : f.adjacentVertices()) p += geometry.vertexPositions[v];
+    //         p /= f.degree();
+    //         Vector3 n = surfaceFaceNormals[f];
+    //         X += yukawaPotential(p, q, lambda) * n * surfaceFaceAreas[f];
+    //     }
+    //     X /= X.norm();
+    //     for (int j = 0; j < 3; j++) Yt(i, j) = X[j];
+    // }
+    pthread_t id[nThreads];
+    threadArg argArr[nThreads];
+    for (int i = 0; i < nThreads; i++) {
+        threadArg arg;
+        argArr[i].id = i;
+        argArr[i].tetSolver = this;
+        argArr[i].geometry = &geometry;
+        pthread_create(&id[i], NULL, staticThreadSum, &argArr[i]);
+    }
+    for (int i = 0; i < nThreads; i++) {
+        pthread_join(id[i], NULL);
     }
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
@@ -125,25 +210,37 @@ Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNor
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
 
     // Evaluate vectors at tet barycenters.
-    size_t P = pointGeom.cloud.nPoints();
-    Eigen::MatrixXd Yt(nTets, 3);
-    double lambda = std::sqrt(1. / shortTime);
-    for (size_t i = 0; i < nTets; i++) {
-        // Compute query point.
-        Vector3 q = {0, 0, 0};
-        for (int j = 0; j < 4; j++) {
-            for (int k = 0; k < 3; k++) q[k] += vertices(tets(i, j), k);
-        }
-        q /= 4.;
-        // Integrate contributions.
-        Vector3 X = {0, 0, 0};
-        for (size_t pIdx = 0; pIdx < P; pIdx++) {
-            Vector3 p = pointGeom.positions[pIdx];
-            Vector3 n = pointGeom.normals[pIdx];
-            X += yukawaPotential(p, q, lambda) * n * pointGeom.tuftedGeom->vertexDualAreas[pIdx];
-        }
-        X /= X.norm();
-        for (int j = 0; j < 3; j++) Yt(i, j) = X[j];
+    Yt = Eigen::MatrixXd::Zero(nTets, 3);
+    // size_t P = pointGeom.cloud.nPoints();
+    // double lambda = std::sqrt(1. / shortTime);
+    // for (size_t i = 0; i < nTets; i++) {
+    //     // Compute query point.
+    //     Vector3 q = {0, 0, 0};
+    //     for (int j = 0; j < 4; j++) {
+    //         for (int k = 0; k < 3; k++) q[k] += vertices(tets(i, j), k);
+    //     }
+    //     q /= 4.;
+    //     // Integrate contributions.
+    //     Vector3 X = {0, 0, 0};
+    //     for (size_t pIdx = 0; pIdx < P; pIdx++) {
+    //         Vector3 p = pointGeom.positions[pIdx];
+    //         Vector3 n = pointGeom.normals[pIdx];
+    //         X += yukawaPotential(p, q, lambda) * n * pointGeom.tuftedGeom->vertexDualAreas[pIdx];
+    //     }
+    //     X /= X.norm();
+    //     for (int j = 0; j < 3; j++) Yt(i, j) = X[j];
+    // }
+    pthread_t id[nThreads];
+    threadArg argArr[nThreads];
+    for (int i = 0; i < nThreads; i++) {
+        threadArg arg;
+        argArr[i].id = i;
+        argArr[i].tetSolver = this;
+        argArr[i].pointGeom = &pointGeom;
+        pthread_create(&id[i], NULL, staticThreadSum, &argArr[i]);
+    }
+    for (int i = 0; i < nThreads; i++) {
+        pthread_join(id[i], NULL);
     }
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
@@ -176,7 +273,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         Vector<double> rhsValsA, rhsValsB;
         decomposeVector(decomp, div, rhsValsA, rhsValsB);
         Vector<double> combinedRHS = rhsValsA;
-        Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        // Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        Vector<double> Aresult = AMGCL_solve(decomp.AA, combinedRHS, VERBOSE);
         phi = reassembleVector(decomp, Aresult, bcVals);
     } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
         // Determine the connected components of the mesh. Do simple depth-first search.
@@ -214,7 +312,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(nVertices + m);
         RHS.head(nVertices) = div;
-        Vector<double> soln = solveSquare(LHS, RHS);
+        // Vector<double> soln = solveSquare(LHS, RHS);
+        Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
         phi = soln.head(nVertices);
         double shift = averageVertexDataOnSource(geometry, phi);
         phi -= shift * Vector<double>::Ones(nVertices);
@@ -251,7 +350,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         Vector<double> rhsValsA, rhsValsB;
         decomposeVector(decomp, div, rhsValsA, rhsValsB);
         Vector<double> combinedRHS = rhsValsA;
-        Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        // Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        Vector<double> Aresult = AMGCL_solve(decomp.AA, combinedRHS, VERBOSE);
         phi = reassembleVector(decomp, Aresult, bcVals);
     } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
         // Determine the connected components of the mesh. Do simple depth-first search.
@@ -289,7 +389,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(nFaces + m);
         RHS.head(nFaces) = div;
-        Vector<double> soln = solveSquare(LHS, RHS);
+        // Vector<double> soln = solveSquare(LHS, RHS);
+        Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
         phi = soln.head(nFaces);
         double shift = averageFaceDataOnSource(geometry, phi);
         phi -= shift * Vector<double>::Ones(nFaces);
@@ -345,7 +446,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             decomposeVector(decomp, div, rhsValsA, rhsValsB);
             Vector<double> combinedRHS = rhsValsA;
             // shiftDiagonal(decomp.AA, 1e-8);
-            Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+            // Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+            Vector<double> Aresult = AMGCL_solve(decomp.AA, combinedRHS, VERBOSE);
             phi = reassembleVector(decomp, Aresult, bcVals);
             break;
         }
@@ -386,7 +488,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             Vector<double> RHS = Vector<double>::Zero(nVertices + m);
             RHS.head(nVertices) = div;
             // shiftDiagonal(LHS, 1e-16);
-            Vector<double> soln = solveSquare(LHS, RHS);
+            // Vector<double> soln = solveSquare(LHS, RHS);
+            Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
             phi = soln.head(nVertices);
             double shift = averageVertexDataOnSource(pointGeom, phi);
             phi -= shift * Vector<double>::Ones(nVertices);

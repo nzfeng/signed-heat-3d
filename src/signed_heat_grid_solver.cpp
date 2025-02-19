@@ -171,6 +171,47 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
             }
         }
     }
+
+    // size_t nThreads = 8;
+    // struct threadArg {
+    //     int id;
+    // };
+    // void* threadSum(void* arg) {
+    //     // auto threadSum = [&](void* arg) -> void* {
+    //     threadArg* threadData = (threadArg*)arg;
+    //     size_t incr = std::floor(nx / nThreads);
+    //     size_t start = (threadData->id) * incr;
+    //     size_t end = (threadData->id < nThreads - 1) ? (threadData->id + 1) * incr : nx;
+    //     for (size_t i = start; i < end; i++) {
+    //         for (size_t j = 0; j < ny; j++) {
+    //             for (size_t k = 0; k < nz; k++) {
+    //                 size_t idx = indicesToNodeIndex(i, j, k);
+    //                 Vector3 y = indicesToNodePosition(i, j, k);
+    //                 for (size_t pIdx = 0; pIdx < P; pIdx++) {
+    //                     Vector3 x = pointGeom.positions[pIdx];
+    //                     Vector3 n = pointGeom.normals[pIdx];
+    //                     double A = pointGeom.tuftedGeom->vertexDualAreas[pIdx];
+    //                     Vector3 source = n * A * yukawaPotential(x, y, lambda);
+    //                     for (int p = 0; p < 3; p++) Y(3 * idx + p) += source[p];
+    //                 }
+    //                 Vector3 X = {Y(3 * idx + 0), Y(3 * idx + 1), Y(3 * idx + 2)};
+    //                 X /= X.norm();
+    //                 for (int p = 0; p < 3; p++) Y(3 * idx + p) = X[p];
+    //             }
+    //         }
+    //     }
+    //     return NULL;
+    // };
+    // pthread_t id[nThreads];
+    // threadArg argArr[nThreads];
+    // for (int i = 0; i < nThreads; i++) {
+    //     argArr[i].id = i;
+    //     pthread_create(&id[i], NULL, threadSum, &argArr[i]);
+    // }
+    // for (int i = 0; i < nThreads; i++) {
+    //     pthread_join(id[i], NULL);
+    // }
+
     if (VERBOSE) std::cerr << "\tCompleted." << std::endl;
 
     // Integrate gradient to get distance.
