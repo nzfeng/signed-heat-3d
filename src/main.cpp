@@ -61,7 +61,7 @@ int INPUT_MODE = InputMode::Mesh;
 std::string MESHNAME = "input mesh";
 std::string OUTPUT_DIR = "../export";
 std::string OUTPUT_FILENAME;
-int LAST_SOLVER_MODE;
+int LAST_SOLVER_MODE = MESH_MODE;
 bool VERBOSE = true;
 bool HEADLESS;
 bool CONTOURED = false;
@@ -71,6 +71,7 @@ void solve() {
     SHM_OPTIONS.levelSetConstraint = static_cast<LevelSetConstraint>(CONSTRAINT_MODE);
     SHM_OPTIONS.tCoef = TCOEF;
     SHM_OPTIONS.hCoef = HCOEF;
+    if (MESH_MODE != LAST_SOLVER_MODE) SHM_OPTIONS.rebuild = true;
     std::string cmapName = "viridis";
     if (MESH_MODE == MeshMode::Tet) {
         if (VERBOSE) std::cerr << "\nSolving on tet mesh..." << std::endl;
@@ -81,6 +82,10 @@ void solve() {
         ms_fp = t2 - t1;
         if (VERBOSE) std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
         if (!HEADLESS) {
+            if (SHM_OPTIONS.rebuild) {
+                polyscope::VolumeMesh* psVolumeMesh =
+                    polyscope::registerTetMesh("domain", tetSolver->vertices, tetSolver->tets);
+            }
             polyscope::getVolumeMesh("domain")
                 ->addVertexScalarQuantity("GSD", PHI)
                 ->setColorMap(cmapName)
@@ -96,6 +101,15 @@ void solve() {
         ms_fp = t2 - t1;
         if (VERBOSE) std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
         if (!HEADLESS) {
+            if (SHM_OPTIONS.rebuild) {
+                glm::vec3 boundMin, boundMax;
+                for (int i = 0; i < 3; i++) {
+                    boundMin[i] = gridSolver->boundMin(i);
+                    boundMax[i] = gridSolver->boundMax(i);
+                }
+                polyscope::VolumeGrid* psGrid = polyscope::registerVolumeGrid(
+                    "domain", {gridSolver->nx, gridSolver->ny, gridSolver->nz}, boundMin, boundMax);
+            }
             gridScalarQ = polyscope::getVolumeGrid("domain")
                               ->addNodeScalarQuantity("GSD", PHI)
                               ->setColorMap(cmapName)

@@ -1010,8 +1010,6 @@ bool SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry) {
     }
     geometry.unrequireVertexIndices();
 
-    // Display the tetmesh in the GUI.
-    polyscope::VolumeMesh* psVolumeMesh = polyscope::registerTetMesh("domain", vertices, tets);
     return true;
 }
 
@@ -1088,9 +1086,6 @@ void SignedHeatTetSolver::tetmeshPointCloud(pointcloud::PointPositionGeometry& p
 
     // Get tet mesh info.
     getTetmeshData(out);
-
-    // Display the tetmesh in the GUI.
-    polyscope::VolumeMesh* psVolumeMesh = polyscope::registerTetMesh("domain", vertices, tets);
 }
 
 /*

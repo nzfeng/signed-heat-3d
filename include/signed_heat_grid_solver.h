@@ -1,7 +1,6 @@
 #pragma once
 
 #include "geometrycentral/numerical/linear_solvers.h"
-#include "polyscope/volume_grid.h"
 
 #include "signed_heat_3d.h"
 
@@ -21,12 +20,14 @@ class SignedHeatGridSolver {
 
     bool VERBOSE = true;
 
-  private:
+    // Exposed parameters for visualizing the grid
     size_t nx = 0;
     size_t ny, nz; // number of vertices on x/y/z side of grid
-    Vector3 bboxMin, bboxMax;
+    Eigen::Vector3d boundMin, boundMax;
 
+  private:
     double shortTime, cellSize;
+    Vector3 bboxMin, bboxMax;
 
     Eigen::SparseMatrix<double, Eigen::RowMajor> laplaceMat;
     FaceData<double> faceAreas;    // of the source geometry

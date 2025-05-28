@@ -16,10 +16,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         // clang-format off
         bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
         bboxMin += c; bboxMax += c;
-        glm::vec3 boundMin, boundMax;
         for (int i = 0; i < 3; i++) {
-            boundMin[i] = bboxMin[i];
-            boundMax[i] = bboxMax[i];
+            boundMin(i) = bboxMin[i];
+            boundMax(i) = bboxMax[i];
         }
         nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
         // clang-format on
@@ -29,7 +28,6 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         t2 = high_resolution_clock::now();
         ms_fp = t2 - t1;
         if (VERBOSE) std::cerr << "Pre-compute time (s): " << ms_fp.count() / 1000. << std::endl;
-        polyscope::VolumeGrid* psGrid = polyscope::registerVolumeGrid("domain", {nx, ny, nz}, boundMin, boundMax);
     }
 
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
@@ -126,10 +124,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         // clang-format off
         bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
         bboxMin += c; bboxMax += c;
-        glm::vec3 boundMin, boundMax;
         for (int i = 0; i < 3; i++) {
-            boundMin[i] = bboxMin[i];
-            boundMax[i] = bboxMax[i];
+            boundMin(i) = bboxMin[i];
+            boundMax(i) = bboxMax[i];
         }
         nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
         // clang-format on
@@ -139,7 +136,6 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         t2 = high_resolution_clock::now();
         ms_fp = t2 - t1;
         if (VERBOSE) std::cerr << "Pre-compute time (s): " << ms_fp.count() / 1000. << std::endl;
-        polyscope::VolumeGrid* psGrid = polyscope::registerVolumeGrid("domain", {nx, ny, nz}, boundMin, boundMax);
     }
 
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
