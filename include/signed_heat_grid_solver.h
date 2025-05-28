@@ -20,13 +20,14 @@ class SignedHeatGridSolver {
 
     bool VERBOSE = true;
 
-    // Exposed parameters for visualizing the grid
-    size_t nx = 0;
-    size_t ny, nz; // number of vertices on x/y/z side of grid
-    Eigen::Vector3d boundMin, boundMax;
+    // Expose parameters for visualizing the grid
+    std::vector<size_t> getGridResolution() const;
+    std::tuple<Eigen::Vector3d, Eigen::Vector3d> getBBox() const;
 
   private:
     double shortTime, cellSize;
+    size_t nx = 0;
+    size_t ny, nz; // number of vertices on x/y/z side of grid
     Vector3 bboxMin, bboxMax;
 
     Eigen::SparseMatrix<double, Eigen::RowMajor> laplaceMat;

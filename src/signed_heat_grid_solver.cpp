@@ -2,6 +2,22 @@
 
 SignedHeatGridSolver::SignedHeatGridSolver() {}
 
+std::vector<size_t> SignedHeatGridSolver::getGridResolution() const {
+
+    std::vector<size_t> sizes = {nx, ny, nz};
+    return sizes;
+}
+
+std::tuple<Eigen::Vector3d, Eigen::Vector3d> SignedHeatGridSolver::getBBox() const {
+
+    Eigen::Vector3d boundMin, boundMax;
+    for (int i = 0; i < 3; i++) {
+        boundMin(i) = bboxMin[i];
+        boundMax(i) = bboxMax[i];
+    }
+    return std::make_tuple(boundMin, boundMax);
+}
+
 Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geometry,
                                                      const SignedHeat3DOptions& options) {
 
@@ -16,10 +32,6 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         // clang-format off
         bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
         bboxMin += c; bboxMax += c;
-        for (int i = 0; i < 3; i++) {
-            boundMin(i) = bboxMin[i];
-            boundMax(i) = bboxMax[i];
-        }
         nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
         // clang-format on
         cellSize = 2. * s / (nx - 1);
@@ -124,10 +136,6 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         // clang-format off
         bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
         bboxMin += c; bboxMax += c;
-        for (int i = 0; i < 3; i++) {
-            boundMin(i) = bboxMin[i];
-            boundMax(i) = bboxMax[i];
-        }
         nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
         // clang-format on
         cellSize = 2. * s / (nx - 1);

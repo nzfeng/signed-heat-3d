@@ -2,6 +2,14 @@
 
 SignedHeatTetSolver::SignedHeatTetSolver() {}
 
+Eigen::MatrixXd SignedHeatTetSolver::getVertices() const {
+    return vertices;
+}
+
+Eigen::MatrixXi SignedHeatTetSolver::getTets() const {
+    return tets;
+}
+
 // =============== ALGORITHM
 
 Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geometry,

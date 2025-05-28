@@ -30,16 +30,18 @@ class SignedHeatTetSolver {
 
     bool VERBOSE = true;
 
-    // Exposed parameters for visualizing the tet mesh
-    Eigen::MatrixXd vertices; // vertex positions
-    Eigen::MatrixXi tets;     // tetrahedra -- each row is vertex indices
+    // Expose parameters for visualizing the tet mesh
+    Eigen::MatrixXd getVertices() const;
+    Eigen::MatrixXi getTets() const;
 
   private:
     // == mesh encoding input surface
     std::vector<int> surfaceFaces; // indexes into faces of tetmesh; sign indicates relative orientation
 
     // == more tetmesh quantities
-    Eigen::MatrixXi faces; // faces -- each row is vertex indices
+    Eigen::MatrixXd vertices; // vertex positions
+    Eigen::MatrixXi tets;     // tetrahedra -- each row is vertex indices
+    Eigen::MatrixXi faces;    // faces -- each row is vertex indices
     size_t nVertices, nTets, nFaces, nEdges;
 
     Eigen::VectorXd faceAreas, tetVolumes;

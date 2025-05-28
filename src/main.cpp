@@ -84,7 +84,7 @@ void solve() {
         if (!HEADLESS) {
             if (SHM_OPTIONS.rebuild) {
                 polyscope::VolumeMesh* psVolumeMesh =
-                    polyscope::registerTetMesh("tet domain", tetSolver->vertices, tetSolver->tets);
+                    polyscope::registerTetMesh("tet domain", tetSolver->getVertices(), tetSolver->getTets());
             }
             polyscope::getVolumeMesh("tet domain")
                 ->addVertexScalarQuantity("GSD", PHI)
@@ -102,13 +102,17 @@ void solve() {
         if (VERBOSE) std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
         if (!HEADLESS) {
             if (SHM_OPTIONS.rebuild) {
-                glm::vec3 boundMin, boundMax;
+                glm::vec3 boundMin, boundMax, gridSizes;
+                Eigen::Vector3d bboxMin, bboxMax;
+                std::tie(bboxMin, bboxMax) = gridSolver->getBBox();
+                std::vector<size_t> sizes = gridSolver->getGridResolution();
                 for (int i = 0; i < 3; i++) {
-                    boundMin[i] = gridSolver->boundMin(i);
-                    boundMax[i] = gridSolver->boundMax(i);
+                    boundMin[i] = bboxMin(i);
+                    boundMax[i] = bboxMax(i);
+                    gridSizes[i] = sizes[i];
                 }
-                polyscope::VolumeGrid* psGrid = polyscope::registerVolumeGrid(
-                    "grid domain", {gridSolver->nx, gridSolver->ny, gridSolver->nz}, boundMin, boundMax);
+                polyscope::VolumeGrid* psGrid =
+                    polyscope::registerVolumeGrid("grid domain", gridSizes, boundMin, boundMax);
             }
             gridScalarQ = polyscope::getVolumeGrid("grid domain")
                               ->addNodeScalarQuantity("GSD", PHI)
