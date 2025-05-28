@@ -184,7 +184,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         Vector<double> rhsValsA, rhsValsB;
         decomposeVector(decomp, div, rhsValsA, rhsValsB);
         Vector<double> combinedRHS = rhsValsA;
-        Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        // Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        Vector<double> Aresult = AMGCL_solve(decomp.AA, combinedRHS, VERBOSE);
         phi = reassembleVector(decomp, Aresult, bcVals);
     } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
         // Determine the connected components of the mesh. Do simple depth-first search.
@@ -222,7 +223,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(nVertices + m);
         RHS.head(nVertices) = div;
-        Vector<double> soln = solveSquare(LHS, RHS);
+        // Vector<double> soln = solveSquare(LHS, RHS);
+        Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
         phi = soln.head(nVertices);
         double shift = averageVertexDataOnSource(geometry, phi);
         phi -= shift * Vector<double>::Ones(nVertices);
@@ -259,7 +261,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         Vector<double> rhsValsA, rhsValsB;
         decomposeVector(decomp, div, rhsValsA, rhsValsB);
         Vector<double> combinedRHS = rhsValsA;
-        Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        // Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        Vector<double> Aresult = AMGCL_solve(decomp.AA, combinedRHS, VERBOSE);
         phi = reassembleVector(decomp, Aresult, bcVals);
     } else if (options.levelSetConstraint == LevelSetConstraint::Multiple) {
         // Determine the connected components of the mesh. Do simple depth-first search.
@@ -297,7 +300,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(nFaces + m);
         RHS.head(nFaces) = div;
-        Vector<double> soln = solveSquare(LHS, RHS);
+        // Vector<double> soln = solveSquare(LHS, RHS);
+        Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
         phi = soln.head(nFaces);
         double shift = averageFaceDataOnSource(geometry, phi);
         phi -= shift * Vector<double>::Ones(nFaces);
@@ -353,7 +357,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             decomposeVector(decomp, div, rhsValsA, rhsValsB);
             Vector<double> combinedRHS = rhsValsA;
             // shiftDiagonal(decomp.AA, 1e-8);
-            Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+            // Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+            Vector<double> Aresult = AMGCL_solve(decomp.AA, combinedRHS, VERBOSE);
             phi = reassembleVector(decomp, Aresult, bcVals);
             break;
         }
@@ -394,7 +399,8 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             Vector<double> RHS = Vector<double>::Zero(nVertices + m);
             RHS.head(nVertices) = div;
             // shiftDiagonal(LHS, 1e-16);
-            Vector<double> soln = solveSquare(LHS, RHS);
+            // Vector<double> soln = solveSquare(LHS, RHS);
+            Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
             phi = soln.head(nVertices);
             double shift = averageVertexDataOnSource(pointGeom, phi);
             phi -= shift * Vector<double>::Ones(nVertices);
