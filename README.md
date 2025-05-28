@@ -74,7 +74,7 @@ To improve performance, operators and spatial discretizations are only built as 
 
 # Performance
 
-As of February 2025, the linear solves in the `multigrid` branch of this repo are accelerated using the algebraic multigrid implementation in [AMGCL](https://amgcl.readthedocs.io/en/latest/).
+Linear solves are accelerated using the algebraic multigrid implementation in [AMGCL](https://amgcl.readthedocs.io/en/latest/).
 
 But there are still several further obvious areas of performance improvement, which haven't been implemented yet:
 

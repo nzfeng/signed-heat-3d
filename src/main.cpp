@@ -84,14 +84,14 @@ void solve() {
         if (!HEADLESS) {
             if (SHM_OPTIONS.rebuild) {
                 polyscope::VolumeMesh* psVolumeMesh =
-                    polyscope::registerTetMesh("domain", tetSolver->vertices, tetSolver->tets);
+                    polyscope::registerTetMesh("tet domain", tetSolver->vertices, tetSolver->tets);
             }
-            polyscope::getVolumeMesh("domain")
+            polyscope::getVolumeMesh("tet domain")
                 ->addVertexScalarQuantity("GSD", PHI)
                 ->setColorMap(cmapName)
                 ->setIsolinesEnabled(true)
                 ->setEnabled(true);
-            polyscope::getVolumeMesh("domain")->setCullWholeElements(true);
+            polyscope::getVolumeMesh("tet domain")->setCullWholeElements(true);
         }
     } else if (MESH_MODE == MeshMode::Grid) {
         t1 = high_resolution_clock::now();
@@ -108,9 +108,9 @@ void solve() {
                     boundMax[i] = gridSolver->boundMax(i);
                 }
                 polyscope::VolumeGrid* psGrid = polyscope::registerVolumeGrid(
-                    "domain", {gridSolver->nx, gridSolver->ny, gridSolver->nz}, boundMin, boundMax);
+                    "grid domain", {gridSolver->nx, gridSolver->ny, gridSolver->nz}, boundMin, boundMax);
             }
-            gridScalarQ = polyscope::getVolumeGrid("domain")
+            gridScalarQ = polyscope::getVolumeGrid("grid domain")
                               ->addNodeScalarQuantity("GSD", PHI)
                               ->setColorMap(cmapName)
                               ->setIsolinesEnabled(true);
@@ -123,7 +123,7 @@ void solve() {
         psPlane = polyscope::addSceneSlicePlane();
         psPlane->setDrawPlane(false);
         psPlane->setDrawWidget(true);
-        if (MESH_MODE == MeshMode::Tet) psPlane->setVolumeMeshToInspect("domain");
+        if (MESH_MODE == MeshMode::Tet) psPlane->setVolumeMeshToInspect("tet domain");
         if (INPUT_MODE == InputMode::Mesh) {
             psMesh->setIgnoreSlicePlane(psPlane->name, true);
         } else {
