@@ -259,8 +259,6 @@ int main(int argc, char** argv) {
 
     args::Group group(parser);
     args::Flag grid(group, "grid", "Solve on a background grid (vs. tet mesh).", {"g", "grid"});
-    args::Flag fast(group, "fast", "Solve using a less accurate, but significantly faster, method of integration.",
-                    {"f", "fast"});
     args::Flag verbose(group, "verbose", "Verbose output", {"V", "verbose"});
     args::Flag headless(group, "headless", "Don't use the GUI.", {"l", "headless"});
 
