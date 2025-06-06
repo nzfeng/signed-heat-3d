@@ -26,6 +26,10 @@ jobs:
       with:
         submodules: recursive
 
+    - name: ubuntu packages
+      if: runner.os == 'Linux'
+      run: apt-get install xorg-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev
+
     - name: configure
       run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
 
