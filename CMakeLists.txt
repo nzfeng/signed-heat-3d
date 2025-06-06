@@ -76,6 +76,8 @@ add_subdirectory(deps/amgcl)
 
 # == Build our project stuff
 
+add_definitions(-UAMGCL_NO_BOOST)
+
 set(SRCS
   src/signed_heat_tet_solver.cpp
   src/signed_heat_grid_solver.cpp
