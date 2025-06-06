@@ -26,19 +26,13 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Set up conda environment on Windows
+    - name: Set up conda environment to install Boost
       uses: conda-incubator/setup-miniconda@v2
       with:
         miniconda-version: latest
         auto-update-conda: true
         activate-environment: conda-env
-      if: runner.os == 'Windows'
-
-    - name: Set up conda on Linux
-      if: runner.os == 'Linux'
-      shell: bash
-      run: |
-        $CONDA/bin/conda env update --file environment.yml --name base
+      if: runner.os == 'Windows' || runner.os == 'Linux'
 
     - name: Install Boost
       if: runner.os == 'macOS'
@@ -49,7 +43,17 @@ jobs:
     - if: runner.os != 'macOS'
       shell: bash
       run: |
-        conda install -c conda-forge boost
+        export BOOST_ROOT=${HOME}/${BOOST_BASENAME}
+
+        if [ ! -e ${BOOST_ROOT}/boost/config.hpp ]; then
+            pushd ${HOME}
+            wget https://downloads.sourceforge.net/project/boost/boost/1.62.0/${BOOST_BASENAME}.tar.bz2
+            rm -rf $BOOST_BASENAME
+            tar xf ${BOOST_BASENAME}.tar.bz2
+            (cd $BOOST_BASENAME && ./bootstrap.sh && ./b2)
+            popd
+        fi
+
 
     - name: ubuntu packages
       if: runner.os == 'Linux'
