@@ -54,4 +54,4 @@ jobs:
       run: cd build && make
 
     - if: runner.os == 'Windows'
-      run: cd build && cmake --build "." -DSHM_NO_BOOST=On
+      run: cd build && cmake --build -DSHM_NO_BOOST=On "."
