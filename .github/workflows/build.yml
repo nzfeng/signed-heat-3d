@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-14, macos-13]
+        os: [ubuntu-latest, windows-latest, macos-14, macos-13]
 
     if: "! contains(toJSON(github.event.commits.*.message), '[ci skip]')"
     steps:
@@ -26,32 +26,32 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Boost
-      if: runner.os == 'macOS'
-      shell: bash
-      run: |
-        brew upgrade
-        brew install boost
-    - if: runner.os == 'Linux'
-      run: |
-        sudo apt-get -y update
-        sudo apt-get -y install libboost-dev
-    - if: runner.os == 'Windows'
-      run: |
-        git clone --depth=1 --recurse-submodules -j10 https://github.com/boostorg/boost.git
-        cd boost
-        bootstrap.bat
+    # - name: Install Boost
+    #   if: runner.os == 'macOS'
+    #   shell: bash
+    #   run: |
+    #     brew upgrade
+    #     brew install boost
+    # - if: runner.os == 'Linux'
+    #   run: |
+    #     sudo apt-get -y update
+    #     sudo apt-get -y install libboost-dev
+    # - if: runner.os == 'Windows'
+    #   run: |
+    #     git clone --depth=1 --recurse-submodules -j10 https://github.com/boostorg/boost.git
+    #     cd boost
+    #     bootstrap.bat
 
     - name: ubuntu packages
       if: runner.os == 'Linux'
       run: sudo apt-get update && sudo apt-get install -y xorg-dev libglu1-mesa-dev xpra xserver-xorg-video-dummy freeglut3-dev
 
     - name: configure
-      run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+      run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSHM_NO_BOOST=On
 
     - name: build
       if: runner.os != 'Windows'
       run: cd build && make
 
     - if: runner.os == 'Windows'
-      run: cd build && cmake --build "."
+      run: cd build && cmake --build "." -DSHM_NO_BOOST=On
