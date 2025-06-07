@@ -41,7 +41,10 @@ jobs:
         brew upgrade
         brew install boost
     - if: runner.os == 'Linux'
-      run: sudo apt-get update && sudo apt-get install -yq libboost-dev-all
+      #run: sudo apt-get update && sudo apt-get install -yq libboost-dev-all
+      run: |
+        sudo apt-get -y update
+        sudo apt-get -y install libboost-dev
     # - if: runner.os != 'macOS'
     #   shell: bash
     #   run: |
