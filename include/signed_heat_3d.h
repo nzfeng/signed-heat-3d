@@ -14,6 +14,7 @@ using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 
+#ifndef SHM_NO_AMGCL
 #include <amgcl/adapter/eigen.hpp>
 #include <amgcl/amg.hpp>
 #include <amgcl/backend/eigen.hpp>
@@ -28,6 +29,7 @@ using std::chrono::milliseconds;
 #include <amgcl/solver/bicgstab.hpp>
 #include <amgcl/solver/cg.hpp>
 #include <amgcl/solver/runtime.hpp>
+#endif
 
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
@@ -52,9 +54,6 @@ double yukawaPotential(const Vector3& x, const Vector3& y, const double& shortTi
 double meanEdgeLength(IntrinsicGeometryInterface& geom);
 void setFaceVectorAreas(VertexPositionGeometry& geometry, FaceData<double>& areas, FaceData<Vector3>& normals);
 
-Vector<double> AMGCL_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor>& LHS, const Vector<double>& RHS,
-                           bool verbose = false);
-Vector<double> AMGCL_blockSolve(const Eigen::SparseMatrix<double, Eigen::RowMajor>& L,
-                                const Eigen::SparseMatrix<double, Eigen::RowMajor>& A,
-                                const Eigen::SparseMatrix<double, Eigen::RowMajor>& Z, const Vector<double>& rhs,
-                                bool verbose = false);
+Vector<double> AMGCL_solve(const SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose = false);
+Vector<double> AMGCL_blockSolve(const SparseMatrix<double>& L, const SparseMatrix<double>& A,
+                                const SparseMatrix<double>& Z, const Vector<double>& rhs, bool verbose = false);

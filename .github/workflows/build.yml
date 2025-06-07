@@ -26,14 +26,6 @@ jobs:
       with:
         submodules: recursive
 
-    # - name: Set up conda environment to install Boost
-    #   uses: conda-incubator/setup-miniconda@v2
-    #   with:
-    #     miniconda-version: latest
-    #     auto-update-conda: true
-    #     activate-environment: conda-env
-    #   if: runner.os == 'Windows' || runner.os == 'Linux'
-
     - name: Install Boost
       if: runner.os == 'macOS'
       shell: bash
@@ -41,14 +33,14 @@ jobs:
         brew upgrade
         brew install boost
     - if: runner.os == 'Linux'
-      #run: sudo apt-get update && sudo apt-get install -yq libboost-dev-all
       run: |
         sudo apt-get -y update
         sudo apt-get -y install libboost-dev
-    # - if: runner.os != 'macOS'
-    #   shell: bash
-    #   run: |
-    #     conda install -c conda-forge boost
+    - if: runner.os == 'Windows'
+      run: |
+        git clone --depth=1 --recurse-submodules -j10 https://github.com/boostorg/boost.git
+        cd boost
+        bootstrap.bat
 
     - name: ubuntu packages
       if: runner.os == 'Linux'

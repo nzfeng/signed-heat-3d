@@ -49,6 +49,8 @@ A Polyscope GUI will open.
 
 If you do not clone recursively, some submodules or sub-submodules will not clone. Initialize/update these submodules by running `git submodule update --init --recursive` or `git submodule update --recursive`.
 
+Linear solves are accelerated using the algebraic multigrid library [AMGCL](https://amgcl.readthedocs.io/en/latest/), which (unfortunately) requires Boost. Boost can be installed on macOS using `brew install boost`; Windows and Linux users should probably follow the instructions on the [Boost website](https://www.boost.org/releases/latest/). If you do not want to use Boost, use `cmake -DSHM_NO_AMGCL=On` to compile to a program without AMGCL but with solve times \~5x slower (more or less for larger/smaller problems). Force use of AMGCL via `cmake -DSHM_NO_AMGCL=Off`.
+
 # Mesh & point cloud input
 
 ## File formats

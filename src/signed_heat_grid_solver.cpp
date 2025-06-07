@@ -74,7 +74,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
 
     // Integrate gradient to get distance.
     if (VERBOSE) std::cerr << "Step 3..." << std::endl;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> D = gradient(); // 3N x N
+    SparseMatrix<double> D = gradient(); // 3N x N
     Vector<double> divYt = D.transpose() * Y;
     for (size_t i = 0; i < divYt.size(); i++) {
         if (std::isinf(divYt[i]) || std::isnan(divYt[i])) divYt[i] = 0.;
@@ -84,7 +84,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     if (options.fastIntegration) {
         phi = integrateGreedily(Y);
     } else {
-        Eigen::SparseMatrix<double, Eigen::RowMajor> A;
+        SparseMatrix<double> A;
         size_t m = 0;
         std::vector<size_t> nodeIndices;
         std::vector<double> coeffs;
@@ -105,13 +105,19 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         }
         A.resize(m, totalNodes);
         A.setFromTriplets(tripletList.begin(), tripletList.end());
-        Eigen::SparseMatrix<double, Eigen::RowMajor> Z(m, m);
-        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
-        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS2 = horizontalStack<double>({A, Z});
-        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS = verticalStack<double>({LHS1, LHS2});
+        SparseMatrix<double> Z(m, m);
+        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
+        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
+        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(totalNodes + m);
         RHS.head(totalNodes) = divYt;
+        // clang-format off
+        #ifndef SHM_NO_AMGCL
         Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
+        #else
+        Vector<double> soln = solveSquare(LHS, RHS);
+        #endif
+        // clang-format on
         phi = -soln.head(totalNodes);
     }
     double shift = evaluateAverageAlongSourceGeometry(geometry, phi);
@@ -179,14 +185,14 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
 
     // Integrate gradient to get distance.
     if (VERBOSE) std::cerr << "Step 3..." << std::endl;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> D = gradient(); // 3N x N
+    SparseMatrix<double> D = gradient(); // 3N x N
     Vector<double> divYt = D.transpose() * Y;
     // No level set constraints implemented for grid.
     Vector<double> phi;
     if (options.fastIntegration) {
         phi = integrateGreedily(Y);
     } else {
-        Eigen::SparseMatrix<double, Eigen::RowMajor> A;
+        SparseMatrix<double> A;
         size_t m = 0;
         std::vector<size_t> nodeIndices;
         std::vector<double> coeffs;
@@ -207,14 +213,19 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         }
         A.resize(m, totalNodes);
         A.setFromTriplets(tripletList.begin(), tripletList.end());
-        Eigen::SparseMatrix<double, Eigen::RowMajor> Z(m, m);
-        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
-        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS2 = horizontalStack<double>({A, Z});
-        Eigen::SparseMatrix<double, Eigen::RowMajor> LHS = verticalStack<double>({LHS1, LHS2});
+        SparseMatrix<double> Z(m, m);
+        SparseMatrix<double> LHS1 = horizontalStack<double>({laplaceMat, A.transpose()});
+        SparseMatrix<double> LHS2 = horizontalStack<double>({A, Z});
+        SparseMatrix<double> LHS = verticalStack<double>({LHS1, LHS2});
         Vector<double> RHS = Vector<double>::Zero(totalNodes + m);
         RHS.head(totalNodes) = divYt;
+        // clang-format off
+        #ifndef SHM_NO_AMGCL
         Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
-        // Vector<double> soln = AMGCL_blockSolve(laplaceMat, A, Z, divYt, VERBOSE);
+        #else
+        Vector<double> soln = solveSquare(LHS, RHS);
+        #endif
+        // clang-format on
         phi = -soln.head(totalNodes);
     }
     double shift = evaluateAverageAlongSourceGeometry(pointGeom, phi);
@@ -280,11 +291,11 @@ Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::VectorXd& Yt
 }
 
 /* Builds negative-definite Laplace */
-Eigen::SparseMatrix<double, Eigen::RowMajor> SignedHeatGridSolver::laplacian() const {
+SparseMatrix<double> SignedHeatGridSolver::laplacian() const {
 
     // Use 5-point stencil (well, I guess 7-point in 3D)
     size_t N = nx * ny * nz;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> L(N, N);
+    SparseMatrix<double> L(N, N);
     std::vector<Eigen::Triplet<double>> triplets;
     for (size_t i = 0; i < nx; i++) {
         for (size_t j = 0; j < ny; j++) {
@@ -338,10 +349,10 @@ Eigen::SparseMatrix<double, Eigen::RowMajor> SignedHeatGridSolver::laplacian() c
     return L / (cellSize * cellSize);
 }
 
-Eigen::SparseMatrix<double, Eigen::RowMajor> SignedHeatGridSolver::gradient() const {
+SparseMatrix<double> SignedHeatGridSolver::gradient() const {
 
     size_t N = nx * ny * nz;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> D(3 * N, N);
+    SparseMatrix<double> D(3 * N, N);
     std::vector<Eigen::Triplet<double>> tripletList;
     for (size_t i = 0; i < nx; i++) {
         for (size_t j = 0; j < ny; j++) {

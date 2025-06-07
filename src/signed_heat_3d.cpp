@@ -88,9 +88,11 @@ void setFaceVectorAreas(VertexPositionGeometry& geometry, FaceData<double>& area
     }
 }
 
-Vector<double> AMGCL_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor>& LHS, const Vector<double>& RHS,
-                           bool verbose) {
+#ifndef SHM_NO_AMGCL
+Vector<double> AMGCL_solve(const SparseMatrix<double>& L, const Vector<double>& RHS, bool verbose) {
 
+    // AMGCL needs Eigen matrices to be in row-major order.
+    Eigen::SparseMatrix<double, Eigen::RowMajor> LHS = L;
     typedef amgcl::backend::eigen<double> Backend;
 
     typedef amgcl::make_solver<
@@ -109,40 +111,4 @@ Vector<double> AMGCL_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor>& L
     if (verbose) std::cerr << "AMGCL # iters: " << iters << "\tAMGCL residual: " << error << std::endl;
     return x;
 }
-
-Vector<double> AMGCL_blockSolve(const Eigen::SparseMatrix<double, Eigen::RowMajor>& L,
-                                const Eigen::SparseMatrix<double, Eigen::RowMajor>& A,
-                                const Eigen::SparseMatrix<double, Eigen::RowMajor>& Z, const Vector<double>& rhs,
-                                bool verbose) {
-
-    Eigen::SparseMatrix<double, Eigen::RowMajor> LHS1 = horizontalStack<double>({Z, A});             // (m x m) x (m, n)
-    Eigen::SparseMatrix<double, Eigen::RowMajor> LHS2 = horizontalStack<double>({A.transpose(), L}); // (n x m) x (n, n)
-    Eigen::SparseMatrix<double, Eigen::RowMajor> LHS = verticalStack<double>({LHS1, LHS2});
-    size_t m = A.rows();
-    size_t n = A.cols();
-    Vector<double> RHS = Vector<double>::Zero(m + n);
-    RHS.tail(n) = rhs;
-
-    typedef amgcl::backend::eigen<double> Backend;
-    // Solver::params prm;
-    // prm.solver.tol = 1e-8;
-    // prm.solver.maxiter = 100;
-    // prm.active_rows = m;
-
-    boost::property_tree::ptree prm;
-    // prm.put("solver.tol", 1e-3);
-    // prm.put("solver.maxiter", 100);
-    prm.put("solver.active_rows", m);
-
-    typedef amgcl::amg<Backend, amgcl::runtime::coarsening::wrapper, amgcl::runtime::relaxation::wrapper> PPrecond;
-    typedef amgcl::relaxation::as_preconditioner<Backend, amgcl::runtime::relaxation::wrapper> SPrecond;
-    amgcl::make_solver<amgcl::preconditioner::cpr<PPrecond, SPrecond>, amgcl::runtime::solver::wrapper<Backend>> solve(
-        LHS, prm);
-
-    int iters;
-    double error;
-    Vector<double> x(m + n);
-    std::tie(iters, error) = solve(RHS, x);
-    if (verbose) std::cerr << "AMGCL # iters: " << iters << "\tAMGCL residual: " << error << std::endl;
-    return x;
-}
+#endif

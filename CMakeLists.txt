@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14.0)
+cmake_minimum_required(VERSION 3.12.0)
 
 project(signed-heat-3d)
 
@@ -76,14 +76,21 @@ add_subdirectory(deps/amgcl)
 
 # == Build our project stuff
 
-add_definitions(-UAMGCL_NO_BOOST)
-
 set(SRCS
   src/signed_heat_tet_solver.cpp
   src/signed_heat_grid_solver.cpp
   src/signed_heat_3d.cpp
   src/main.cpp
 )
+
+option(SHM_NO_AMGCL "Do not use AMGCL" OFF)
+if (SHM_NO_AMGCL)
+  add_definitions(-DSHM_NO_AMGCL=)
+  message(STATUS "Not using AMGCL")
+else()
+  add_definitions(-USHM_NO_AMGCL)
+  message(STATUS "Using AMGCL")
+endif()
 
 add_executable(main "${SRCS}")
 target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/")
