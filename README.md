@@ -6,6 +6,8 @@ C++ demo for "[A Heat Method for Generalized Signed Distance](https://nzfeng.git
 
 <!-- Python bindings:  -->
 
+<!-- Unit tests -->
+
 Project page with links to paper, pseudocode, supplementals, & videos: [link](https://nzfeng.github.io/research/SignedHeatMethod/index.html)
 
 This Github repository demonstrates the _Signed Heat Method (SHM)_ on **3D volumetric domains**, solving for (generalized) signed distance to triangle meshes, polygon meshes, and point clouds. No assumptions are placed on the input, besides that it be consistently oriented.
@@ -66,7 +68,7 @@ The algorithm is robust to self-intersections, holes, and noise in the input geo
 
 # Usage
 
-Full documentation lives at []().
+<!-- Full documentation lives at [](). -->
 
 In addition to the mesh file, you can pass several arguments to the command line, including flags which are also shown as options in the GUI.
 
