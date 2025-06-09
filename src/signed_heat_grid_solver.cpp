@@ -2,10 +2,8 @@
 
 SignedHeatGridSolver::SignedHeatGridSolver() {}
 
-std::vector<size_t> SignedHeatGridSolver::getGridResolution() const {
-
-    std::vector<size_t> sizes = {nx, ny, nz};
-    return sizes;
+std::array<size_t, 3> SignedHeatGridSolver::getGridResolution() const {
+    return resolution;
 }
 
 std::tuple<Eigen::Vector3d, Eigen::Vector3d> SignedHeatGridSolver::getBBox() const {
@@ -26,15 +24,15 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         std::chrono::time_point<high_resolution_clock> t1, t2;
         std::chrono::duration<double, std::milli> ms_fp;
         t1 = high_resolution_clock::now();
-        Vector3 c = centroid(geometry);
-        double r = radius(geometry, c);
-        double s = r * options.scale;
-        // clang-format off
-        bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
-        bboxMin += c; bboxMax += c;
-        nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
-        // clang-format on
-        cellSize = 2. * s / (nx - 1);
+        if (!isBoundingBoxValid(options.bboxMin, options.bboxMax)) {
+            std::tie(bboxMin, bboxMax) = computeBBox(geometry);
+        } else {
+            bboxMin = options.bboxMin;
+            bboxMax = options.bboxMax;
+        }
+        if (isResolutionValid(options.resolution)) resolution = options.resolution;
+        Vector3 diag = bboxMax - bboxMin;
+        for (int i = 0; i < 3; i++) cellSizes[i] = diag[i] / (resolution[i] - 1);
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
         laplaceMat = laplacian();
         t2 = high_resolution_clock::now();
@@ -49,12 +47,12 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
     double h = meanEdgeLength(geometry);
     shortTime = options.tCoef * h * h;
     double lambda = std::sqrt(1. / shortTime);
-    size_t totalNodes = nx * ny * nz;
+    size_t totalNodes = resolution[0] * resolution[1] * resolution[2];
     Eigen::VectorXd Y = Eigen::VectorXd::Zero(3 * totalNodes);
     setFaceVectorAreas(geometry, faceAreas, faceNormals);
-    for (size_t i = 0; i < nx; i++) {
-        for (size_t j = 0; j < ny; j++) {
-            for (size_t k = 0; k < nz; k++) {
+    for (size_t i = 0; i < resolution[0]; i++) {
+        for (size_t j = 0; j < resolution[1]; j++) {
+            for (size_t k = 0; k < resolution[2]; k++) {
                 size_t idx = indicesToNodeIndex(i, j, k);
                 Vector3 x = indicesToNodePosition(i, j, k);
                 for (Face f : mesh.faces()) {
@@ -93,9 +91,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         for (Face f : mesh.faces()) {
             Vector3 b = barycenter(geometry, f);
             Vector3 d = b - bboxMin;
-            size_t i = std::floor(d[0] / cellSize);
-            size_t j = std::floor(d[1] / cellSize);
-            size_t k = std::floor(d[2] / cellSize);
+            size_t i = std::floor(d[0] / cellSizes[0]);
+            size_t j = std::floor(d[1] / cellSizes[1]);
+            size_t k = std::floor(d[2] / cellSizes[2]);
             size_t nodeIdx = indicesToNodeIndex(i, j, k);
             if (hasCellBeenUsed[nodeIdx]) continue;
             trilinearCoefficients(b, nodeIndices, coeffs);
@@ -136,15 +134,15 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         std::chrono::time_point<high_resolution_clock> t1, t2;
         std::chrono::duration<double, std::milli> ms_fp;
         t1 = high_resolution_clock::now();
-        Vector3 c = centroid(pointGeom);
-        double r = radius(pointGeom, c);
-        double s = r * options.scale;
-        // clang-format off
-        bboxMin = {-s, -s, -s}; bboxMax = {s, s, s};
-        bboxMin += c; bboxMax += c;
-        nx = 2 * std::pow(2, options.hCoef + 3); ny = nx; nz = nx;
-        // clang-format on
-        cellSize = 2. * s / (nx - 1);
+        if (!isBoundingBoxValid(options.bboxMin, options.bboxMax)) {
+            std::tie(bboxMin, bboxMax) = computeBBox(pointGeom);
+        } else {
+            bboxMin = options.bboxMin;
+            bboxMax = options.bboxMax;
+        }
+        if (isResolutionValid(options.resolution)) resolution = options.resolution;
+        Vector3 diag = bboxMax - bboxMin;
+        for (int i = 0; i < 3; i++) cellSizes[i] = diag[i] / (resolution[i] - 1);
         if (VERBOSE) std::cerr << "Building Laplacian..." << std::endl;
         laplaceMat = laplacian();
         t2 = high_resolution_clock::now();
@@ -160,12 +158,12 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
     double h = meanEdgeLength(*(pointGeom.tuftedGeom));
     shortTime = options.tCoef * h * h;
     double lambda = std::sqrt(1. / shortTime);
-    size_t totalNodes = nx * ny * nz;
+    size_t totalNodes = resolution[0] * resolution[1] * resolution[2];
     Eigen::VectorXd Y = Eigen::VectorXd::Zero(3 * totalNodes);
     size_t P = pointGeom.cloud.nPoints();
-    for (size_t i = 0; i < nx; i++) {
-        for (size_t j = 0; j < ny; j++) {
-            for (size_t k = 0; k < nz; k++) {
+    for (size_t i = 0; i < resolution[0]; i++) {
+        for (size_t j = 0; j < resolution[1]; j++) {
+            for (size_t k = 0; k < resolution[2]; k++) {
                 size_t idx = indicesToNodeIndex(i, j, k);
                 Vector3 y = indicesToNodePosition(i, j, k);
                 for (size_t pIdx = 0; pIdx < P; pIdx++) {
@@ -201,9 +199,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         for (size_t pIdx = 0; pIdx < P; pIdx++) {
             Vector3 b = pointGeom.positions[pIdx];
             Vector3 d = b - bboxMin;
-            size_t i = std::floor(d[0] / cellSize);
-            size_t j = std::floor(d[1] / cellSize);
-            size_t k = std::floor(d[2] / cellSize);
+            size_t i = std::floor(d[0] / cellSizes[0]);
+            size_t j = std::floor(d[1] / cellSizes[1]);
+            size_t k = std::floor(d[2] / cellSizes[2]);
             size_t nodeIdx = indicesToNodeIndex(i, j, k);
             if (hasCellBeenUsed[nodeIdx]) continue;
             trilinearCoefficients(b, nodeIndices, coeffs);
@@ -239,12 +237,14 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
 
 Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::VectorXd& Yt) {
 
+    size_t nx = resolution[0];
+    size_t ny = resolution[1];
+    size_t nz = resolution[2];
     Vector<double> phi = Vector<double>::Zero(nx * ny * nz);
     Vector<bool> visited = Vector<bool>::Zero(nx * ny * nz);
     std::queue<std::array<size_t, 3>> queue;
     queue.push({0, 0, 0});
     visited[0] = true;
-    std::array<size_t, 3> dims = {nx, ny, nz};
     std::array<size_t, 3> curr, next;
     while (!queue.empty()) {
         curr = queue.front();
@@ -269,7 +269,7 @@ Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::VectorXd& Yt
                     queue.push(next);
                 }
             }
-            if (curr[i] < dims[i] - 1) {
+            if (curr[i] < resolution[i] - 1) {
                 next = curr;
                 next[i] += 1;
                 size_t nextIdx = indicesToNodeIndex(next[0], next[1], next[2]);
@@ -293,8 +293,14 @@ Vector<double> SignedHeatGridSolver::integrateGreedily(const Eigen::VectorXd& Yt
 /* Builds negative-definite Laplace */
 SparseMatrix<double> SignedHeatGridSolver::laplacian() const {
 
-    // Use 5-point stencil (well, I guess 7-point in 3D)
+
+    // clang-format off
+    size_t nx = resolution[0]; size_t ny = resolution[1]; size_t nz = resolution[2];
+    double hx = 1. / cellSizes[0]; double hy = 1. / cellSizes[1]; double hz = 1. / cellSizes[2];
+    double hx2 = hx*hx; double hy2 = hy*hy; double hz2 = hz*hz;
+    // clang-format on
     size_t N = nx * ny * nz;
+    // Use 5-point stencil (well, I guess 7-point in 3D)
     SparseMatrix<double> L(N, N);
     std::vector<Eigen::Triplet<double>> triplets;
     for (size_t i = 0; i < nx; i++) {
@@ -334,23 +340,27 @@ SparseMatrix<double> SignedHeatGridSolver::laplacian() const {
                     currZ = nextZ;
                 }
 
-                triplets.emplace_back(currIdx, nextX, 1);
-                triplets.emplace_back(currIdx, nextY, 1);
-                triplets.emplace_back(currIdx, nextZ, 1);
-                triplets.emplace_back(currIdx, prevX, 1);
-                triplets.emplace_back(currIdx, prevY, 1);
-                triplets.emplace_back(currIdx, prevZ, 1);
-                triplets.emplace_back(currIdx, currIdx, -6);
+                triplets.emplace_back(currIdx, nextX, hx2);
+                triplets.emplace_back(currIdx, nextY, hy2);
+                triplets.emplace_back(currIdx, nextZ, hz2);
+                triplets.emplace_back(currIdx, prevX, hx2);
+                triplets.emplace_back(currIdx, prevY, hy2);
+                triplets.emplace_back(currIdx, prevZ, hz2);
+                triplets.emplace_back(currIdx, currIdx, -2. * (hx2 + hy2 + hz2));
             }
         }
     }
     L.setFromTriplets(triplets.begin(), triplets.end());
 
-    return L / (cellSize * cellSize);
+    return L;
 }
 
 SparseMatrix<double> SignedHeatGridSolver::gradient() const {
 
+    // clang-format off
+    size_t nx = resolution[0]; size_t ny = resolution[1]; size_t nz = resolution[2];
+    double hx = 1. / cellSizes[0]; double hy = 1. / cellSizes[1]; double hz = 1. / cellSizes[2];
+    // clang-format on
     size_t N = nx * ny * nz;
     SparseMatrix<double> D(3 * N, N);
     std::vector<Eigen::Triplet<double>> tripletList;
@@ -358,31 +368,6 @@ SparseMatrix<double> SignedHeatGridSolver::gradient() const {
         for (size_t j = 0; j < ny; j++) {
             for (size_t k = 0; k < nz; k++) {
                 size_t currIdx = indicesToNodeIndex(i, j, k);
-                // if (i < nx - 1) {
-                //     size_t nextX = indicesToNodeIndex(i + 1, j, k);
-                //     tripletList.emplace_back(3 * currIdx, nextX, 1);
-                // }
-                // if (i > 0) {
-                //     size_t prevX = indicesToNodeIndex(i - 1, j, k);
-                //     tripletList.emplace_back(3 * currIdx, prevX, -1);
-                // }
-                // if (j < ny - 1) {
-                //     size_t nextY = indicesToNodeIndex(i, j + 1, k);
-                //     tripletList.emplace_back(3 * currIdx + 1, nextY, 1);
-                // }
-                // if (j > 0) {
-                //     size_t prevY = indicesToNodeIndex(i, j - 1, k);
-                //     tripletList.emplace_back(3 * currIdx + 1, prevY, -1);
-                // }
-                // if (k < nz - 1) {
-                //     size_t nextZ = indicesToNodeIndex(i, j, k + 1);
-                //     tripletList.emplace_back(3 * currIdx + 2, nextZ, 1);
-                // }
-                // if (k > 0) {
-                //     size_t prevZ = indicesToNodeIndex(i, j, k - 1);
-                //     tripletList.emplace_back(3 * currIdx + 2, prevZ, -1);
-                // }
-
                 // forward differences
                 size_t currX = currIdx;
                 size_t currY = currIdx;
@@ -403,27 +388,27 @@ SparseMatrix<double> SignedHeatGridSolver::gradient() const {
                     nextZ = currIdx;
                     currZ = indicesToNodeIndex(i, j, k - 1);
                 }
-                tripletList.emplace_back(3 * currIdx, nextX, 1);
-                tripletList.emplace_back(3 * currIdx, currX, -1);
-                tripletList.emplace_back(3 * currIdx + 1, nextY, 1);
-                tripletList.emplace_back(3 * currIdx + 1, currY, -1);
-                tripletList.emplace_back(3 * currIdx + 2, nextZ, 1);
-                tripletList.emplace_back(3 * currIdx + 2, currZ, -1);
+                tripletList.emplace_back(3 * currIdx, nextX, hx);
+                tripletList.emplace_back(3 * currIdx, currX, -hx);
+                tripletList.emplace_back(3 * currIdx + 1, nextY, hy);
+                tripletList.emplace_back(3 * currIdx + 1, currY, -hy);
+                tripletList.emplace_back(3 * currIdx + 2, nextZ, hz);
+                tripletList.emplace_back(3 * currIdx + 2, currZ, -hz);
             }
         }
     }
     D.setFromTriplets(tripletList.begin(), tripletList.end());
 
-    return D / cellSize;
+    return D;
 }
 
 /* Evaluate a function at position q, interpolating trilinearly inside grid cells. */
 double SignedHeatGridSolver::evaluateFunction(const Vector<double>& u, const Vector3& q) const {
 
     Vector3 d = q - bboxMin;
-    int i = static_cast<int>(std::floor(d[0] / cellSize));
-    int j = static_cast<int>(std::floor(d[1] / cellSize));
-    int k = static_cast<int>(std::floor(d[2] / cellSize));
+    int i = static_cast<int>(std::floor(d[0] / cellSizes[0]));
+    int j = static_cast<int>(std::floor(d[1] / cellSizes[1]));
+    int k = static_cast<int>(std::floor(d[2] / cellSizes[2]));
     Vector3 p000 = indicesToNodePosition(i, j, k);
     double v000 = u[indicesToNodeIndex(i, j, k)];
     double v100 = u[indicesToNodeIndex(i + 1, j, k)];
@@ -433,9 +418,9 @@ double SignedHeatGridSolver::evaluateFunction(const Vector<double>& u, const Vec
     double v101 = u[indicesToNodeIndex(i + 1, j, k + 1)];
     double v011 = u[indicesToNodeIndex(i, j + 1, k + 1)];
     double v111 = u[indicesToNodeIndex(i + 1, j + 1, k + 1)];
-    double tx = (q[0] - p000[0]) / cellSize;
-    double ty = (q[1] - p000[1]) / cellSize;
-    double tz = (q[2] - p000[2]) / cellSize;
+    double tx = (q[0] - p000[0]) / cellSizes[0];
+    double ty = (q[1] - p000[1]) / cellSizes[1];
+    double tz = (q[2] - p000[2]) / cellSizes[2];
     double v00 = v000 * (1. - tx) + v100 * tx;
     double v01 = v001 * (1. - tx) + v101 * tx;
     double v10 = v010 * (1. - tx) + v110 * tx;
@@ -449,11 +434,10 @@ double SignedHeatGridSolver::evaluateFunction(const Vector<double>& u, const Vec
 void SignedHeatGridSolver::trilinearCoefficients(const Vector3& q, std::vector<size_t>& nodeIndices,
                                                  std::vector<double>& coeffs) const {
 
-    double h = cellSize;
     Vector3 d = q - bboxMin;
-    size_t i = std::floor(d[0] / h);
-    size_t j = std::floor(d[1] / h);
-    size_t k = std::floor(d[2] / h);
+    size_t i = std::floor(d[0] / cellSizes[0]);
+    size_t j = std::floor(d[1] / cellSizes[1]);
+    size_t k = std::floor(d[2] / cellSizes[2]);
     Vector3 p000 = indicesToNodePosition(i, j, k);
     size_t i000 = indicesToNodeIndex(i, j, k);
     size_t i100 = indicesToNodeIndex(i + 1, j, k);
@@ -464,9 +448,9 @@ void SignedHeatGridSolver::trilinearCoefficients(const Vector3& q, std::vector<s
     size_t i011 = indicesToNodeIndex(i, j + 1, k + 1);
     size_t i111 = indicesToNodeIndex(i + 1, j + 1, k + 1);
     nodeIndices = {i000, i100, i010, i001, i110, i101, i011, i111};
-    double tx = (q[0] - p000[0]) / h;
-    double ty = (q[1] - p000[1]) / h;
-    double tz = (q[2] - p000[2]) / h;
+    double tx = (q[0] - p000[0]) / cellSizes[0];
+    double ty = (q[1] - p000[1]) / cellSizes[1];
+    double tz = (q[2] - p000[2]) / cellSizes[2];
     coeffs = {
         (1. - tx) * (1. - ty) * (1. - tz), // 000
         tx * (1. - ty) * (1. - tz),        // 100
@@ -519,12 +503,11 @@ Vector3 SignedHeatGridSolver::barycenter(VertexPositionGeometry& geometry, const
 }
 
 size_t SignedHeatGridSolver::indicesToNodeIndex(const size_t& i, const size_t& j, const size_t& k) const {
-    // return i * (ny * nz) + j * nz + k;
-    return i + j * ny + k * (nx * ny);
+    return i + j * resolution[0] + k * (resolution[0] * resolution[1]);
 }
 
 Vector3 SignedHeatGridSolver::indicesToNodePosition(const size_t& i, const size_t& j, const size_t& k) const {
-    Vector3 pos = {i * cellSize, j * cellSize, k * cellSize};
+    Vector3 pos = {i * cellSizes[0], j * cellSizes[1], k * cellSizes[2]};
     pos += bboxMin;
     return pos;
 }
@@ -543,9 +526,9 @@ void SignedHeatGridSolver::exportData(const Vector<double>& phi, const SignedHea
     f.open(filename, std::ios::out | std::ios::trunc);
     if (f.is_open()) {
         f << "xCoord,yCoord,zCoord,SDF" << "\n";
-        for (size_t i = 0; i < nx; i++) {
-            for (size_t j = 0; j < ny; j++) {
-                for (size_t k = 0; k < nz; k++) {
+        for (size_t i = 0; i < resolution[0]; i++) {
+            for (size_t j = 0; j < resolution[1]; j++) {
+                for (size_t k = 0; k < resolution[2]; k++) {
                     Vector3 x = indicesToNodePosition(i, j, k);
                     size_t idx = indicesToNodeIndex(i, j, k);
                     f << x[0] << "," << x[1] << "," << x[2] << "," << phi[idx] << "\n";

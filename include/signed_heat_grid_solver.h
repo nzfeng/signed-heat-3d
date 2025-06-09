@@ -21,13 +21,13 @@ class SignedHeatGridSolver {
     bool VERBOSE = true;
 
     // Expose parameters for visualizing the grid
-    std::vector<size_t> getGridResolution() const;
+    std::array<size_t, 3> getGridResolution() const;
     std::tuple<Eigen::Vector3d, Eigen::Vector3d> getBBox() const;
 
   private:
-    double shortTime, cellSize;
-    size_t nx = 0;
-    size_t ny, nz; // number of vertices on x/y/z side of grid
+    double shortTime;
+    Vector3 cellSizes;
+    std::array<size_t, 3> resolution = {32, 32, 32}; // number of vertices on x/y/z side of grid
     Vector3 bboxMin, bboxMax;
 
     SparseMatrix<double> laplaceMat;

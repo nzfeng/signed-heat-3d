@@ -26,10 +26,19 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
         setFaceVectorAreas(geometry, surfaceFaceAreas, surfaceFaceNormals);
         for (Face f : mesh.faces()) meanFaceArea += surfaceFaceAreas[f];
         meanFaceArea /= mesh.nFaces();
-        double areaScale = std::pow(2, -options.hCoef);
-        TETFLAGS = TET_PREFIX + std::to_string(areaScale * meanFaceArea);
-        TETFLAGS_PRESERVE = TET_PREFIX + std::to_string(areaScale * meanFaceArea) + "Y";
-        if (mesh.isTriangular()) isConforming = tetmeshDomain(geometry);
+        double length = options.resolution[0] > 0 ? 1. / options.resolution[0] : 1. / 32;
+        length *= 16;
+        double maxVolume = length * length * length / (6. * std::sqrt(2.));
+        TETFLAGS = TET_PREFIX + std::to_string(maxVolume);
+        TETFLAGS_PRESERVE = TET_PREFIX + std::to_string(maxVolume) + "Y";
+        Vector3 bboxMin, bboxMax;
+        if (!isBoundingBoxValid(options.bboxMin, options.bboxMax)) {
+            std::tie(bboxMin, bboxMax) = computeBBox(geometry);
+        } else {
+            bboxMin = options.bboxMin;
+            bboxMax = options.bboxMax;
+        }
+        if (mesh.isTriangular()) isConforming = tetmeshDomain(geometry, bboxMin, bboxMax);
         if (!isConforming) {
             size_t nPts = mesh.nVertices();
             cloud = std::unique_ptr<pointcloud::PointCloud>(new pointcloud::PointCloud(nPts));
@@ -37,7 +46,7 @@ Vector<double> SignedHeatTetSolver::computeDistance(VertexPositionGeometry& geom
             for (size_t i = 0; i < nPts; i++) pointPositions[i] = geometry.vertexPositions[i];
             pointPolyGeom = std::unique_ptr<pointcloud::PointPositionGeometry>(
                 new pointcloud::PointPositionGeometry(*cloud, pointPositions));
-            tetmeshPointCloud(*pointPolyGeom);
+            tetmeshPointCloud(*pointPolyGeom, bboxMin, bboxMax);
         }
         // With direct convolution in R^n, it's not clear what we should pick as our timestep. Just use the
         // tetmesh/trimesh as a proxy.
@@ -112,10 +121,19 @@ Vector<double> SignedHeatTetSolver::computeDistance(pointcloud::PointPositionNor
         double meanArea = 0.;
         for (size_t i = 0; i < pointGeom.cloud.nPoints(); i++) meanArea += pointGeom.tuftedGeom->vertexDualAreas[i];
         meanArea /= pointGeom.cloud.nPoints();
-        double areaScale = std::pow(2, -options.hCoef);
-        TETFLAGS = TET_PREFIX + std::to_string(areaScale * meanArea);
-        TETFLAGS_PRESERVE = TET_PREFIX + std::to_string(areaScale * meanArea) + "Y";
-        tetmeshPointCloud(pointGeom);
+        double length = options.resolution[0] > 0 ? 1. / options.resolution[0] : 1. / 32;
+        length *= 16;
+        double maxVolume = length * length * length / (6. * std::sqrt(2.));
+        TETFLAGS = TET_PREFIX + std::to_string(maxVolume);
+        TETFLAGS_PRESERVE = TET_PREFIX + std::to_string(maxVolume) + "Y";
+        Vector3 bboxMin, bboxMax;
+        if (!isBoundingBoxValid(options.bboxMin, options.bboxMax)) {
+            std::tie(bboxMin, bboxMax) = computeBBox(pointGeom);
+        } else {
+            bboxMin = options.bboxMin;
+            bboxMax = options.bboxMax;
+        }
+        tetmeshPointCloud(pointGeom, bboxMin, bboxMax);
         // With direct convolution in R^n, it's not clear what we should pick as our timestep. Just use the
         // tetmesh/trimesh as a proxy.
         if (VERBOSE) std::cerr << "Computing tet mesh data..." << std::endl;
@@ -924,15 +942,14 @@ Eigen::Vector3d SignedHeatTetSolver::faceBarycenter(size_t fIdx) const {
  * should all be preserved. However, the faces of the bounding cube should be sufficiently refined from the first step
  * that the resulting tets are small enough and of similar size to the ones everywhere else.
  */
-bool SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry) {
+bool SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry, const Vector3& bboxMin,
+                                        const Vector3 bboxMax) {
 
     SurfaceMesh& mesh = geometry.mesh;
 
     // First Delaunay triangulate the surface of the bounding cube.
     tetgenio cubeSurface;
-    Vector3 geomCentroid = centroid(geometry);
-    double geomRadius = radius(geometry, geomCentroid);
-    triangulateCube(cubeSurface, geomCentroid, geomRadius);
+    triangulateCube(cubeSurface, bboxMin, bboxMax);
     if (VERBOSE) std::cerr << "bounding box triangulated" << std::endl;
 
     // Create a constrained tetmesh of the surface, without changing any of the input faces itself.
@@ -1055,13 +1072,14 @@ bool SignedHeatTetSolver::tetmeshDomain(VertexPositionGeometry& geometry) {
     return true;
 }
 
-void SignedHeatTetSolver::tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom) {
+void SignedHeatTetSolver::tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom, const Vector3& bboxMin,
+                                            const Vector3 bboxMax) {
 
     // First Delaunay triangulate the surface of the bounding cube.
     tetgenio cubeSurface;
     Vector3 geomCentroid = centroid(pointGeom);
     double geomRadius = radius(pointGeom, geomCentroid);
-    triangulateCube(cubeSurface, geomCentroid, geomRadius);
+    triangulateCube(cubeSurface, bboxMax, bboxMin);
     if (VERBOSE) std::cerr << "bounding box triangulated" << std::endl;
 
     tetgenio in, out;
@@ -1134,14 +1152,13 @@ void SignedHeatTetSolver::tetmeshPointCloud(pointcloud::PointPositionGeometry& p
  * Generate a constrained Delaunay tetrahedralization of a cube surrounding the input surface mesh.
  * Return only the boundary of the cube.
  */
-void SignedHeatTetSolver::triangulateCube(tetgenio& cubeSurface, const Vector3& centroid, const double& radius,
-                                          double scale) const {
+void SignedHeatTetSolver::triangulateCube(tetgenio& cubeSurface, const Vector3& bboxMin, const Vector3 bboxMax) const {
 
     tetgenio in, out;
     tetgenio::facet* f;
     tetgenio::polygon* p;
 
-    tetmeshCube(in, out, centroid, radius, scale);
+    tetmeshCube(in, out, bboxMin, bboxMax);
 
     // Determine which faces/vertices lie on the boundary.
     std::vector<int> fIdx; // indices of boundary faces in tetmesh
@@ -1196,8 +1213,8 @@ void SignedHeatTetSolver::triangulateCube(tetgenio& cubeSurface, const Vector3& 
     }
 }
 
-void SignedHeatTetSolver::tetmeshCube(tetgenio& in, tetgenio& out, const Vector3& centroid, const double& radius,
-                                      double scale) const {
+void SignedHeatTetSolver::tetmeshCube(tetgenio& in, tetgenio& out, const Vector3& bboxMin,
+                                      const Vector3 bboxMax) const {
 
     tetgenio::facet* f;
     tetgenio::polygon* p;
@@ -1209,7 +1226,7 @@ void SignedHeatTetSolver::tetmeshCube(tetgenio& in, tetgenio& out, const Vector3
     in.pointmarkerlist = new int[in.numberofpoints];
 
     // Define nodes.
-    std::vector<Vector3> cubeCorners = buildCubeAroundSurface(centroid, radius, scale);
+    std::vector<Vector3> cubeCorners = buildCubeAroundSurface(bboxMin, bboxMax);
 
     for (int i = 0; i < in.numberofpoints; i++) {
         in.pointmarkerlist[i] = 1;
@@ -1254,23 +1271,19 @@ void SignedHeatTetSolver::tetmeshCube(tetgenio& in, tetgenio& out, const Vector3
  * Construct a cube around the input surface mesh.
  * Returns the 3D positions of the 8 corners of the cube.
  */
-std::vector<Vector3> SignedHeatTetSolver::buildCubeAroundSurface(const Vector3& centroid, const double& radius,
-                                                                 double scale) const {
+std::vector<Vector3> SignedHeatTetSolver::buildCubeAroundSurface(const Vector3& bboxMin, const Vector3 bboxMax) const {
 
-    // make the side length of the cube big enough to surround the entire mesh.
-    double s = radius * scale;
-
+    Vector3 s = bboxMax - bboxMin;
     std::vector<Vector3> cubeCorners = {
-        {-s, -s, -s}, // bottom lower left corner
-        {-s, -s, s},  // bottom upper left
-        {s, -s, s},   // bottom upper right
-        {s, -s, -s},  // bottom lower right
-        {-s, s, -s},  // upper lower left corner
-        {-s, s, s},   // upper upper left
-        {s, s, s},    // upper upper right
-        {s, s, -s}    // upper lower right
+        bboxMin,                           // bottom lower left corner
+        bboxMin + Vector3{0., 0., s[2]},   // bottom upper left
+        bboxMin + Vector3{s[0], 0., s[2]}, // bottom upper right
+        bboxMin + Vector3{s[0], 0., 0.},   // bottom lower right
+        bboxMin + Vector3{0., s[1], 0.},   // upper lower left corner
+        bboxMin + Vector3{0., s[1], s[2]}, // upper upper left
+        bboxMax,                           // upper upper right
+        bboxMin + Vector3{s[0], s[1], 0.}  // upper lower right
     };
-    for (size_t i = 0; i < 8; i++) cubeCorners[i] += centroid;
 
     return cubeCorners;
 }

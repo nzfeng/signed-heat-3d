@@ -42,6 +42,37 @@ double radius(pointcloud::PointPositionGeometry& pointGeom, const Vector3& c) {
     return r;
 }
 
+bool isBoundingBoxValid(const Vector3& bboxMin, const Vector3& bboxMax) {
+    return (bboxMax[0] > bboxMin[0]) && (bboxMax[1] > bboxMin[1]) && (bboxMax[2] > bboxMin[2]);
+}
+
+bool isResolutionValid(const std::array<size_t, 3>& resolution) {
+    return (resolution[0] > 0) && (resolution[1] > 0) && (resolution[2] > 0);
+}
+
+std::pair<Vector3, Vector3> computeBBox(VertexPositionGeometry& geometry) {
+
+    Vector3 c = centroid(geometry);
+    double r = radius(geometry, c);
+    double s = 2. * r;
+    // clang-format off
+    Vector3 bboxMin = {-s, -s, -s}; Vector3 bboxMax = {s, s, s};
+    bboxMin += c; bboxMax += c;
+    // clang-format on
+    return std::make_pair(bboxMin, bboxMax);
+}
+
+std::pair<Vector3, Vector3> computeBBox(pointcloud::PointPositionNormalGeometry& pointGeom) {
+    Vector3 c = centroid(pointGeom);
+    double r = radius(pointGeom, c);
+    double s = 2. * r;
+    // clang-format off
+    Vector3 bboxMin = {-s, -s, -s}; Vector3 bboxMax = {s, s, s};
+    bboxMin += c; bboxMax += c;
+    // clang-format on
+    return std::make_pair(bboxMin, bboxMax);
+}
+
 double yukawaPotential(const Vector3& x, const Vector3& y, const double& lambda) {
 
     double r = (x - y).norm();

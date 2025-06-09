@@ -13,6 +13,12 @@
 #include "signed_heat_grid_solver.h"
 #include "signed_heat_tet_solver.h"
 
+template <typename T>
+std::istream& operator>>(std::istream& is, std::vector<T>& v) {
+    std::copy(std::istream_iterator<T>(is), std::istream_iterator<T>(), std::back_inserter(v));
+    return is;
+}
+
 #include "args/args.hxx"
 #include "imgui.h"
 
@@ -47,7 +53,7 @@ polyscope::SlicePlane* psPlane;
 
 // Solvers & parameters
 float TCOEF = 1.0;
-float HCOEF = 0.0;
+std::array<int, 3> RESOLUTION = {16, 16, 16};
 std::unique_ptr<SignedHeatTetSolver> tetSolver;
 std::unique_ptr<SignedHeatGridSolver> gridSolver;
 SignedHeat3DOptions SHM_OPTIONS;
@@ -70,7 +76,7 @@ void solve() {
 
     SHM_OPTIONS.levelSetConstraint = static_cast<LevelSetConstraint>(CONSTRAINT_MODE);
     SHM_OPTIONS.tCoef = TCOEF;
-    SHM_OPTIONS.hCoef = HCOEF;
+    for (int i = 0; i < 3; i++) SHM_OPTIONS.resolution[i] = RESOLUTION[i]; // implicit cast
     if (MESH_MODE != LAST_SOLVER_MODE) SHM_OPTIONS.rebuild = true;
     std::string cmapName = "viridis";
     if (MESH_MODE == MeshMode::Tet) {
@@ -105,7 +111,7 @@ void solve() {
                 glm::vec3 boundMin, boundMax, gridSizes;
                 Eigen::Vector3d bboxMin, bboxMax;
                 std::tie(bboxMin, bboxMax) = gridSolver->getBBox();
-                std::vector<size_t> sizes = gridSolver->getGridResolution();
+                std::array<size_t, 3> sizes = gridSolver->getGridResolution();
                 for (int i = 0; i < 3; i++) {
                     boundMin[i] = bboxMin(i);
                     boundMax[i] = bboxMax(i);
@@ -167,9 +173,18 @@ void callback() {
         ImGui::Checkbox("Use Crouzeix-Raviart", &SHM_OPTIONS.useCrouzeixRaviart);
     }
     ImGui::InputFloat("tCoef (diffusion time)", &TCOEF);
-    if (ImGui::InputFloat("hCoef (mesh spacing)", &HCOEF)) {
+
+    // Resolution
+    if (ImGui::InputInt("Resolution (x-axis)", &RESOLUTION[0])) {
         SHM_OPTIONS.rebuild = true;
     }
+    if (ImGui::InputInt("Resolution (y-axis)", &RESOLUTION[1])) {
+        SHM_OPTIONS.rebuild = true;
+    }
+    if (ImGui::InputInt("Resolution (z-axis)", &RESOLUTION[2])) {
+        SHM_OPTIONS.rebuild = true;
+    }
+
     if (MESH_MODE != MeshMode::Grid) {
         ImGui::RadioButton("Constrain zero set", &CONSTRAINT_MODE, static_cast<int>(LevelSetConstraint::ZeroSet));
         ImGui::RadioButton("Constrain multiple levelsets", &CONSTRAINT_MODE,
@@ -248,14 +263,38 @@ std::tuple<std::vector<Vector3>, std::vector<Vector3>> readPointCloud(const std:
     return std::make_tuple(positions, normals);
 }
 
+struct IntVectorReader {
+    void operator()(const std::string& name, const std::string& value, std::vector<size_t>& destination) {
+        std::stringstream ss(value);
+        while (ss.good()) {
+            std::string substr;
+            getline(ss, substr, ',');
+            destination.push_back(std::stoi(substr));
+        }
+    }
+};
+
+struct DoubleVectorReader {
+    void operator()(const std::string& name, const std::string& value, std::vector<double>& destination) {
+        std::stringstream ss(value);
+        while (ss.good()) {
+            std::string substr;
+            getline(ss, substr, ',');
+            destination.push_back(std::stod(substr));
+        }
+    }
+};
+
 int main(int argc, char** argv) {
 
     // Configure the argument parser
     args::ArgumentParser parser("Solve for generalized signed distance (3D domains).");
     args::HelpFlag help(parser, "help", "Display this help menu", {"help"});
     args::Positional<std::string> meshFilename(parser, "mesh", "A mesh or point cloud file.");
-    args::ValueFlag<double> hCoef(parser, "h", "Controls the tet/grid spacing proportional to $2^{-h}$.",
-                                  {"h", "hCoef"});
+    args::ValueFlag<std::vector<size_t>, IntVectorReader> hCoef(
+        parser, "h", "The number of nodes of the computational domain (along each axis)", {"h"});
+    args::ValueFlag<std::vector<double>, DoubleVectorReader> bbox(
+        parser, "b", "The positions of the minimum/maximum nodes of the rectangular computational domain.", {"b"});
 
     args::Group group(parser);
     args::Flag grid(group, "grid", "Solve on a background grid (vs. tet mesh).", {"g", "grid"});
@@ -277,9 +316,6 @@ int main(int argc, char** argv) {
     if (!meshFilename) {
         std::cerr << "Please specify a mesh file as argument." << std::endl;
         return EXIT_FAILURE;
-    }
-    if (hCoef) {
-        HCOEF = args::get(hCoef);
     }
 
     // Load mesh
@@ -316,6 +352,27 @@ int main(int argc, char** argv) {
     gridSolver = std::unique_ptr<SignedHeatGridSolver>(new SignedHeatGridSolver());
     tetSolver->VERBOSE = verbose;
     gridSolver->VERBOSE = verbose;
+
+    // Get the parameters of the computational domain.
+    if (bbox) {
+        std::vector<double> b = args::get(bbox);
+        if (b.size() != 6) throw std::logic_error("Need to specify domain corners as two 3-dimensional vectors.");
+        for (int i = 0; i < 3; i++) {
+            SHM_OPTIONS.bboxMin[i] = b[i];
+            SHM_OPTIONS.bboxMax[i] = b[3 + i];
+        }
+        Vector3 diag = SHM_OPTIONS.bboxMax - SHM_OPTIONS.bboxMin;
+        if (diag[0] < 0. || diag[1] < 0. || diag[2] < 0.)
+            throw std::logic_error("The minimum node needs to be smaller than the maximum node.");
+    }
+    if (hCoef) {
+        std::vector<size_t> b = args::get(hCoef);
+        if (b.size() < 3) {
+            RESOLUTION = {b[0], b[0], b[0]};
+        } else {
+            for (int i = 0; i < 3; i++) RESOLUTION[i] = b[i];
+        }
+    }
 
     if (!HEADLESS) {
         polyscope::init();

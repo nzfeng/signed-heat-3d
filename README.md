@@ -2,6 +2,10 @@
 
 C++ demo for "[A Heat Method for Generalized Signed Distance](https://nzfeng.github.io/research/SignedHeatMethod/index.html)" by [Nicole Feng](https://nzfeng.github.io/index.html) and [Keenan Crane](https://www.cs.cmu.edu/~kmcrane/), presented at SIGGRAPH 2024.
 
+<!-- Documentation:  -->
+
+<!-- Python bindings:  -->
+
 Project page with links to paper, pseudocode, supplementals, & videos: [link](https://nzfeng.github.io/research/SignedHeatMethod/index.html)
 
 This Github repository demonstrates the _Signed Heat Method (SHM)_ on **3D volumetric domains**, solving for (generalized) signed distance to triangle meshes, polygon meshes, and point clouds. No assumptions are placed on the input, besides that it be consistently oriented.
@@ -62,13 +66,16 @@ The algorithm is robust to self-intersections, holes, and noise in the input geo
 
 # Usage
 
+Full documentation lives at []().
+
 In addition to the mesh file, you can pass several arguments to the command line, including flags which are also shown as options in the GUI.
 
-|flag | purpose|
+|flag | usage | purpose|
 | ------------- |-------------|
-|`--g`, `--grid`| Solve on a background grid. By default, the domain will be discretized as a tet mesh. |
-|`--V`, `--verbose`| Verbose output. Off by default.|
-|`--h`| Controls the tet/grid spacing proportional to $2^{-h}$, with larger values indicating more refinement. Default value is 0.|
+|`--g`, `--grid`| `--g`, `--grid` | Solve on a background grid. By default, the domain will be discretized as a tet mesh. |
+|`--V`, `--verbose`| `--V`, `--verbose`| Verbose output. Off by default.|
+|`--h`| `--h=64`, `--h=64,64,128` `--h 64, 32, 128`| 3D vector specifying the tet/grid spacing, with larger values indicating more refinement. If solving on a grid, this corresponds to the number of nodes along each dimension. Default values are $2^{5}$.|
+|`--b`| `--b=0., 0., 0., 1., 1., 1.`, `--b 0., 0., 0., 1., 1., 1.`| Specify the 3D positions of the minimum and maximum corners of the computational domain (in that order), which is assumed to be an axis-aligned rectangular prism. If not specified, the size of the domain will be automatically computed so as to encompass the input source geometry.|
 |`--l`, `--headless`| Don't use the GUI, and automatically solve for & export the generalized SDF.|
 |`--help`| Display help. |
 

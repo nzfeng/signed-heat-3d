@@ -97,12 +97,11 @@ class SignedHeatTetSolver {
     //== tet-meshing
     std::string TET_PREFIX = "pq1.414zfenna"; // need -f, -e to output all faces, edges in tetmesh; -nn for adjacency
     std::string TETFLAGS, TETFLAGS_PRESERVE;
-    bool tetmeshDomain(VertexPositionGeometry& geometry);
-    void tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom);
-    void triangulateCube(tetgenio& cubeSurface, const Vector3& centroid, const double& radius, double scale = 2.) const;
-    void tetmeshCube(tetgenio& in, tetgenio& out, const Vector3& centroid, const double& radius,
-                     double scale = 2) const;
-    std::vector<Vector3> buildCubeAroundSurface(const Vector3& centroid, const double& radius, double scale) const;
+    bool tetmeshDomain(VertexPositionGeometry& geometry, const Vector3& bboxMin, const Vector3 bboxMax);
+    void tetmeshPointCloud(pointcloud::PointPositionGeometry& pointGeom, const Vector3& bboxMin, const Vector3 bboxMax);
+    void triangulateCube(tetgenio& cubeSurface, const Vector3& bboxMin, const Vector3 bboxMax) const;
+    void tetmeshCube(tetgenio& in, tetgenio& out, const Vector3& bboxMin, const Vector3 bboxMax) const;
+    std::vector<Vector3> buildCubeAroundSurface(const Vector3& bboxMin, const Vector3 bboxMax) const;
     void getTetmeshData(tetgenio& out);
     double computeMeanNodeSpacing() const;
 };

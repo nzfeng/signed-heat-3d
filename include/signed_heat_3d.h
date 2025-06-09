@@ -37,9 +37,10 @@ using namespace geometrycentral::surface;
 struct SignedHeat3DOptions {
     LevelSetConstraint levelSetConstraint = LevelSetConstraint::ZeroSet;
     double tCoef = 1.0;
-    double hCoef = 0.0;
     bool rebuild = true;
-    double scale = 2.;
+    Vector3 bboxMin = {1., 1., 1.};
+    Vector3 bboxMax = {-1., -1., -1.};
+    std::array<size_t, 3> resolution = {0, 0, 0};
     bool useCrouzeixRaviart = true;
     bool fastIntegration = false;
     bool exportData = false;
@@ -53,6 +54,11 @@ double radius(pointcloud::PointPositionGeometry& pointGeom, const Vector3& c);
 double yukawaPotential(const Vector3& x, const Vector3& y, const double& shortTime);
 double meanEdgeLength(IntrinsicGeometryInterface& geom);
 void setFaceVectorAreas(VertexPositionGeometry& geometry, FaceData<double>& areas, FaceData<Vector3>& normals);
+
+bool isBoundingBoxValid(const Vector3& bboxMin, const Vector3& bboxMax);
+bool isResolutionValid(const std::array<size_t, 3>& resolution);
+std::pair<Vector3, Vector3> computeBBox(VertexPositionGeometry& geometry);
+std::pair<Vector3, Vector3> computeBBox(pointcloud::PointPositionNormalGeometry& pointGeom);
 
 Vector<double> AMGCL_solve(const SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose = false);
 Vector<double> AMGCL_blockSolve(const SparseMatrix<double>& L, const SparseMatrix<double>& A,
