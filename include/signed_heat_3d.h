@@ -60,6 +60,6 @@ bool isResolutionValid(const std::array<size_t, 3>& resolution);
 std::pair<Vector3, Vector3> computeBBox(VertexPositionGeometry& geometry);
 std::pair<Vector3, Vector3> computeBBox(pointcloud::PointPositionNormalGeometry& pointGeom);
 
-Vector<double> AMGCL_solve(const SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose = false);
+Vector<double> AMGCL_solve(SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose = false);
 Vector<double> AMGCL_blockSolve(const SparseMatrix<double>& L, const SparseMatrix<double>& A,
                                 const SparseMatrix<double>& Z, const Vector<double>& rhs, bool verbose = false);

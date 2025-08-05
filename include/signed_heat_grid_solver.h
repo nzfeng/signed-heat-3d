@@ -23,6 +23,9 @@ class SignedHeatGridSolver {
     // Expose parameters for visualizing the grid
     std::array<size_t, 3> getGridResolution() const;
     std::tuple<Eigen::Vector3d, Eigen::Vector3d> getBBox() const;
+    // Expose functions that determine flattening ordering
+    size_t indicesToNodeIndex(const size_t& i, const size_t& j, const size_t& k) const;
+    Vector3 indicesToNodePosition(const size_t& i, const size_t& j, const size_t& k) const;
 
   private:
     double shortTime;
@@ -43,7 +46,5 @@ class SignedHeatGridSolver {
     double evaluateAverageAlongSourceGeometry(pointcloud::PointPositionGeometry& pointGeom,
                                               const Vector<double>& u) const;
     Vector3 barycenter(VertexPositionGeometry& geometry, const Face& f) const;
-    size_t indicesToNodeIndex(const size_t& i, const size_t& j, const size_t& k) const;
-    Vector3 indicesToNodePosition(const size_t& i, const size_t& j, const size_t& k) const;
     void exportData(const Vector<double>& phi, const SignedHeat3DOptions& options) const;
 };

@@ -1,43 +1,41 @@
-cmake_minimum_required(VERSION 3.12.0)
+cmake_minimum_required(VERSION 3.8.0)
 
-project(signed-heat-3d)
+# Set up testing
+enable_testing()
+
+project(signed-heat-3d-tests)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
 
 ### Configure output locations
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)  
-
-# Print the build type
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release" FORCE)
-endif()
-message(STATUS "cmake build type: ${CMAKE_BUILD_TYPE}")
 
 ### Configure the compiler
-# This is a basic, decent setup that should do something sane on most compilers
 
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 
   # using Clang (linux or apple) or GCC
   message("Using clang/gcc compiler flags")
-  SET(CMAKE_CXX_STANDARD 11)
-  SET(BASE_CXX_FLAGS "-std=c++11 -Wall -Wextra") 
-  SET(DISABLED_WARNINGS " -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-missing-braces -Wno-unused-label -Wno-register -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-result -Wno-narrowing -Wno-unused-but-set-variable -Wno-unused-lambda-capture -Wno-unused-local-typedefs")
+  SET(BASE_CXX_FLAGS "-std=c++14 -Wall -Wextra -g3")
+  SET(CMAKE_CXX_FLAGS_DEBUG          "")
+  SET(DISABLED_WARNINGS " -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-missing-braces -Wno-unused-private-field")
   SET(TRACE_INCLUDES " -H -Wno-error=unused-command-line-argument")
 
   if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     message("Setting clang-specific options")
-    SET(BASE_CXX_FLAGS "${BASE_CXX_FLAGS} -ferror-limit=3 -Wfatal-errors -fcolor-diagnostics")
-    SET(CMAKE_CXX_FLAGS_DEBUG          "-g3 -fsanitize=address -fno-limit-debug-info")
+    SET(BASE_CXX_FLAGS "${BASE_CXX_FLAGS} -ferror-limit=3 -fcolor-diagnostics")
+    SET(CMAKE_CXX_FLAGS_DEBUG          "-fsanitize=address -fno-limit-debug-info")
   elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     message("Setting gcc-specific options")
     SET(BASE_CXX_FLAGS "${BASE_CXX_FLAGS} -fmax-errors=5")
-    SET(CMAKE_CXX_FLAGS_DEBUG          "-g3")
     SET(DISABLED_WARNINGS "${DISABLED_WARNINGS} -Wno-maybe-uninitialized -Wno-format-zero-length -Wno-unused-but-set-parameter -Wno-unused-but-set-variable")
   endif()
-  
-  SET(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} ${DISABLED_WARNINGS} -std=c++11")
+
+  SET(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} ${DISABLED_WARNINGS}")
+  SET(CMAKE_CXX_FLAGS_DEBUG          "${CMAKE_CXX_FLAGS_DEBUG} -g3")
+  SET(CMAKE_CXX_FLAGS_RELEASE        "-O3 -march=native -DNDEBUG")
 
   include(CheckCXXCompilerFlag)
   unset(COMPILER_SUPPORTS_MARCH_NATIVE CACHE)
@@ -61,25 +59,55 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd")
 
   add_definitions(/D "_CRT_SECURE_NO_WARNINGS")
-  add_definitions(-DNOMINMAX)
-  add_definitions(-D_USE_MATH_DEFINES)
+  add_definitions (-DNOMINMAX)
 else()
   # unrecognized
   message( FATAL_ERROR "Unrecognized compiler [${CMAKE_CXX_COMPILER_ID}]" )
 endif()
 
-# == Deps
-add_subdirectory(deps/polyscope)
-add_subdirectory(./src "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}") # build signed-heat-3d
 
-# == Build our project stuff
+### Download and unpack googletest at configure time
+# (from the googletest docs)
+if(${CMAKE_VERSION} VERSION_LESS 3.14)
+  include(FetchContentLocal)
+else()
+  include(FetchContent)
+endif()
 
-set(SRCS
-  src/main.cpp
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY    https://github.com/google/googletest.git
+    GIT_TAG           v1.15.2
+    SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-src"
+    BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-build"
 )
 
-add_executable(main "${SRCS}")
+# Prevent overriding the parent project's compiler/linker
+# settings on Windows
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
-# add the args.hxx project which we use for command line args
-target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/polyscope/deps/args")
-target_link_libraries(main signed-heat-3d polyscope)
+FetchContent_MakeAvailable(googletest)
+
+set_property(TARGET gtest PROPERTY CXX_STANDARD 11)
+
+# silence warning about deprecated copies in gtest
+# https://github.com/abseil/abseil-cpp/issues/948#issuecomment-846592426
+if(NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+  target_compile_options(gtest INTERFACE -Wno-deprecated-copy)
+endif()
+
+
+# Build the tests
+set(TEST_SRCS
+  src/solve.cpp
+)
+
+add_subdirectory(../deps/polyscope deps/polyscope)
+
+add_executable(shm_test "${TEST_SRCS}")
+target_include_directories(shm_test PUBLIC "${gtest_SOURCE_DIR}/include")
+target_include_directories(shm_test PRIVATE "include/")
+target_link_libraries(shm_test gtest_main signed-heat-3d polyscope)
+
+# Add signed-heat-3d as a subproject
+add_subdirectory(../src/ "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")

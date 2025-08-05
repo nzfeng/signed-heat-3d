@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-14, macos-13]
+        os: [macos-14, macos-13, ubuntu-latest]
 
     if: "! contains(toJSON(github.event.commits.*.message), '[ci skip]')"
     steps:
@@ -26,21 +26,16 @@ jobs:
       with:
         submodules: recursive
 
-    # - name: Install Boost
-    #   if: runner.os == 'macOS'
-    #   shell: bash
-    #   run: |
-    #     brew upgrade
-    #     brew install boost
-    # - if: runner.os == 'Linux'
-    #   run: |
-    #     sudo apt-get -y update
-    #     sudo apt-get -y install libboost-dev
-    # - if: runner.os == 'Windows'
-    #   run: |
-    #     git clone --depth=1 --recurse-submodules -j10 https://github.com/boostorg/boost.git
-    #     cd boost
-    #     bootstrap.bat
+    - name: Install Boost
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew upgrade
+        brew install boost
+    - if: runner.os == 'Linux'
+      run: |
+        sudo apt-get -y update
+        sudo apt-get -y install libboost-dev
 
     - name: ubuntu packages
       if: runner.os == 'Linux'
@@ -53,5 +48,14 @@ jobs:
       if: runner.os != 'Windows'
       run: cd build && make
 
-    - if: runner.os == 'Windows'
+    - name: build
+      if: runner.os == 'Windows'
       run: cd build && cmake --build "." -DSHM_NO_AMGCL=On
+
+    - name: build tests
+      if: runner.os != 'Windows'
+      run: cd ../test && mkdir build && cd build && cmake .. 
+
+    - name: run tests
+      if: runner.os != 'Windows'
+      run: make && bin/shm_test
