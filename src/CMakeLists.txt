@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.8.0)
+cmake_minimum_required(VERSION 3.5.0)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 # Maybe stop from CMAKEing in the wrong place
 if (CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
