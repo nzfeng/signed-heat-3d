@@ -58,4 +58,4 @@ jobs:
 
     - name: run tests
       if: runner.os != 'Windows'
-      run: make && bin/shm_test
+      run: cd test/build && make && bin/shm_test
