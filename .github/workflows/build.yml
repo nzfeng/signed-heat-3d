@@ -32,10 +32,11 @@ jobs:
       run: |
         brew upgrade
         brew install boost
-    - if: runner.os == 'Linux'
+    - name: Install Boost
+      if: runner.os == 'Linux'
       run: |
         sudo apt-get -y update
-        sudo apt-get -y install libboost-dev
+        sudo apt-get -y install libboost-dev libboost-test-dev libboost-program-options-dev libboost-serialization-dev
 
     - name: ubuntu packages
       if: runner.os == 'Linux'
