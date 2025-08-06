@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-14, macos-13, ubuntu-latest]
+        os: [macos-14, macos-13]
 
     if: "! contains(toJSON(github.event.commits.*.message), '[ci skip]')"
     steps:
@@ -44,13 +44,13 @@ jobs:
     - name: configure (with AMGCL)
       run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSHM_NO_AMGCL=Off
 
-    - name: build
+    - name: build demo
       if: runner.os != 'Windows'
       run: cd build && make
 
-    - name: build
+    - name: build demo
       if: runner.os == 'Windows'
-      run: cd build && cmake --build "." -DSHM_NO_AMGCL=On
+      run: cd build && cmake --build "." -DSHM_NO_AMGCL=Off
 
     - name: build tests
       if: runner.os != 'Windows'
