@@ -1,4 +1,4 @@
-#include "signed_heat_3d.h"
+#include "signedheat3d/signed_heat_3d.h"
 
 #include <exception>
 

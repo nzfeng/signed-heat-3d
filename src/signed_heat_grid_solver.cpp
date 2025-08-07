@@ -1,4 +1,4 @@
-#include "signed_heat_grid_solver.h"
+#include "signedheat3d/signed_heat_grid_solver.h"
 
 SignedHeatGridSolver::SignedHeatGridSolver() {}
 

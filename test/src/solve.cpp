@@ -2,14 +2,8 @@
 
 #include "gtest/gtest.h"
 
-#include "signed_heat_grid_solver.h"
-#include "signed_heat_tet_solver.h"
-
-#include "polyscope/point_cloud.h"
-#include "polyscope/polyscope.h"
-#include "polyscope/surface_mesh.h"
-#include "polyscope/volume_grid.h"
-#include "polyscope/volume_mesh.h"
+#include "signedheat3d/signed_heat_grid_solver.h"
+#include "signedheat3d/signed_heat_tet_solver.h"
 
 #include <chrono>
 using std::chrono::duration;
@@ -290,36 +284,4 @@ TEST_F(SignedDistanceSolversTest, gridDistanceToPointCloud) {
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
-
-    // polyscope::init();
-
-    // SignedDistanceSolversTest test = SignedDistanceSolversTest();
-    // Vector<double> phi = test.tetSolver->computeDistance(*(test.geometry), test.options);
-    // Vector<double> sdf = test.tetDistanceToMesh();
-    // double minVal = std::numeric_limits<double>::infinity();
-    // double maxVal = 0.;
-    // for (size_t i = 0; i < phi.size(); i++) {
-    //     phi[i] = abs(phi[i]);
-    //     sdf[i] = abs(sdf[i]);
-    //     minVal = std::min(minVal, sdf[i]);
-    //     maxVal = std::max(maxVal, sdf[i]);
-    // }
-    // double error = (phi - sdf).mean() / (maxVal - minVal);
-    // std::cerr << error << std::endl;
-
-    // polyscope::VolumeMesh* psVolumeMesh =
-    //     polyscope::registerTetMesh("tet domain", test.tetSolver->getVertices(), test.tetSolver->getTets());
-    // polyscope::getVolumeMesh("tet domain")
-    //     ->addVertexScalarQuantity("sdf", sdf)
-    //     ->setColorMap("viridis")
-    //     ->setIsolinesEnabled(true)
-    //     ->setEnabled(true);
-
-    // polyscope::getVolumeMesh("tet domain")
-    //     ->addVertexScalarQuantity("phi", phi)
-    //     ->setColorMap("viridis")
-    //     ->setIsolinesEnabled(true)
-    //     ->setEnabled(true);
-
-    // polyscope::show();
 }

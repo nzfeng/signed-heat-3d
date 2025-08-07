@@ -13,7 +13,7 @@ SET(SRCS
   signed_heat_tet_solver.cpp  
 )
 
-SET(INCLUDE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../include/")
+SET(INCLUDE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../include/signedheat3d/")
 SET(HEADERS
   ${INCLUDE_ROOT}/signed_heat_3d.h
   ${INCLUDE_ROOT}/signed_heat_grid_solver.h
@@ -40,7 +40,6 @@ add_subdirectory(../deps/amgcl deps/amgcl)
 target_include_directories(signed-heat-3d PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 
 # Add all includes and link libraries from dependencies
-target_include_directories(signed-heat-3d PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../include/")
 target_include_directories(signed-heat-3d PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../deps/tetgen/")
 target_include_directories(signed-heat-3d PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../deps/libigl/include")
 target_link_libraries(signed-heat-3d geometry-central tetgen amgcl::amgcl)
