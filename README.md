@@ -19,18 +19,16 @@ More resources:
 
 ## Performance
 
-To improve performance, operators and spatial discretizations are only built as necessary, and re-used in future computations if the underlying discretization hasn't changed. This means future computations can be significantly faster than the initial solve (which includes, for example, tet mesh construction and matrix factorization.)
+1. To improve performance, operators and spatial discretizations are only built as necessary, and re-used in future computations if the underlying discretization hasn't changed. This means future computations can be significantly faster than the initial solve (which includes, for example, tet mesh construction and matrix factorization.)
 
-Linear solves are (optionally) accelerated using the algebraic multigrid library [AMGCL](https://amgcl.readthedocs.io/en/latest/), which (unfortunately) requires Boost. If you do not want to use Boost, use `cmake -DSHM_NO_AMGCL=On` to compile to a program without AMGCL but with solve times \~5x slower (more or less for larger/smaller problems). Force use of AMGCL via `cmake -DSHM_NO_AMGCL=Off`.
-
-Boost can be installed on macOS using `brew install boost`, and the necessary modules on Ubuntu using
+2. Linear solves are (optionally) accelerated using the algebraic multigrid library [AMGCL](https://amgcl.readthedocs.io/en/latest/), which (unfortunately) requires Boost. If you do not want to use Boost, use `cmake -DSHM_NO_AMGCL=On` to compile to a program without AMGCL but with solve times \~5x slower (more or less for larger/smaller problems). Force use of AMGCL via `cmake -DSHM_NO_AMGCL=Off`. Boost can be installed on macOS using `brew install boost`, and the necessary modules on Ubuntu using
 ```
 sudo apt-get -y update
 sudo apt-get -y install libboost-dev libboost-test-dev libboost-program-options-dev libboost-serialization-dev
 ```
 Windows users should probably follow the instructions on the [Boost website](https://www.boost.org/releases/latest/).
 
-There are still several further obvious areas of performance improvement, which haven't been implemented yet:
+3. There are still several further obvious areas of performance improvement, which haven't been implemented yet:
 * In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution; the integral is evaluted simply by direct summation, even though this summation is trivially parallelizable. 
 * One could optimize loop order when iterating over source/domain elements (whichever is smaller) for better cache behavior.
 * More performance-critical implementations could also implement hierarchical summation.
