@@ -102,12 +102,9 @@ set(TEST_SRCS
   src/solve.cpp
 )
 
-add_subdirectory(../deps/polyscope deps/polyscope)
-
 add_executable(shm_test "${TEST_SRCS}")
 target_include_directories(shm_test PUBLIC "${gtest_SOURCE_DIR}/include")
 target_include_directories(shm_test PRIVATE "include/")
-target_link_libraries(shm_test gtest_main signed-heat-3d polyscope)
 
 # Add signed-heat-3d as a subproject
 add_subdirectory(../src/ "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
