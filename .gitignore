@@ -4,6 +4,7 @@ build/
 **/build/
 **/*.ppm
 **/site_build/
+docs/docs
 
 # Editor and OS things
 .DS_Store
