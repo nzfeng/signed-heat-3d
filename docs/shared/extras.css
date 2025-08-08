@@ -1,0 +1,32 @@
+/*:root  > * {
+  --md-primary-fg-color:        #447091;
+  --md-primary-fg-color--light: #447091;
+  --md-primary-fg-color--dark:  #447091;
+}*/
+
+/* Custom buttons at the top to select language version, copied from polyscope-docs */
+
+.lang-button {
+	border-style: solid;
+	border-width: 2px;
+	border-color: white;
+  border-radius: 8px;
+	color: white;
+	padding: 0.5em;
+  font-weight: 500;
+	text-align: center;
+	display: inline-block;
+	font-size: 140%;
+	padding: 3px;
+  margin-left: 0.5rem;
+	margin-top: 0.5rem;
+	margin-bottom: 0.5rem;
+}
+
+.lang-button-inactive {
+	opacity: 0.45;
+}
+
+.lang-button-inactive:hover {
+	opacity: 1.0;
+}

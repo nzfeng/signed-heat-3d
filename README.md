@@ -1,6 +1,6 @@
 # signed-heat-3d (3D volumetric domains)
 
-## Documentation is at [nzfeng.github.io/signed-heat-3d](nzfeng.github.io/signed-heat-3d)
+## Documentation is at [nzfeng.github.io/signed-heat-3d](https://nzfeng.github.io/signed-heat-3d)
 
 C++ demo for "[A Heat Method for Generalized Signed Distance](https://nzfeng.github.io/research/SignedHeatMethod/index.html)" by [Nicole Feng](https://nzfeng.github.io/index.html) and [Keenan Crane](https://www.cs.cmu.edu/~kmcrane/), presented at SIGGRAPH 2024.
 

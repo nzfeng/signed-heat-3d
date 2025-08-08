@@ -1,0 +1,57 @@
+site_name: Signed Heat Method - Python
+site_url: https://nzfeng.github.io/signed-heat-3d/py
+
+docs_dir: 'source'
+site_dir: 'site_build'
+
+theme:
+  name: material
+  custom_dir: 'theme_overrides'
+  palette:
+    scheme: default
+    accent: deep purple
+    primary: red
+  font:
+    text: Libre Caslon Text
+    code: Roboto Mono
+  features:
+  - content.code.copy
+
+markdown_extensions:
+- pymdownx.highlight:
+    anchor_linenums: true
+    line_spans: __span
+    pygments_lang_class: true
+    use_pygments: true
+- codehilite
+- admonition
+- attr_list
+- markdown.extensions.footnotes
+- markdown.extensions.smarty
+- pymdownx.superfences
+- pymdownx.details
+- pymdownx.inlinehilite
+- pymdownx.arithmatex
+- pymdownx.emoji
+
+extra:
+  search:
+    tokenizer: '[\s\-\.::]+'
+  url:
+    prefix: '/py/'
+
+extra_css:
+  - ../../shared/extras.css
+
+repo_name: nzfeng/signed-heat-python
+repo_url: https://github.com/nzfeng/signed-heat-python
+
+extra_javascript:
+- https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-MML-AM_CHTML
+
+nav:
+- Home: index.md
+- Building:
+  - Building: build/building.md
+  - Tests: build/tests.md
+- Solvers: algorithm/solvers.md

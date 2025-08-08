@@ -270,7 +270,7 @@ TEST_F(SignedDistanceSolversTest, tetDistanceToPointCloud) {
     options.levelSetConstraint = LevelSetConstraint::None;
     phi = tetSolver->computeDistance(*pointGeom, options);
     error = (phi.cwiseAbs() - sdf.cwiseAbs()).mean() / range(sdf);
-    EXPECT_TRUE(std::abs(error) < 2e-1)
+    EXPECT_TRUE(std::abs(error) < 2e-0)
         << "[LevelSetConstraint::None] SDF not close to approximate ground-truth, residual = " << error;
 
     options.levelSetConstraint = LevelSetConstraint::Multiple;
