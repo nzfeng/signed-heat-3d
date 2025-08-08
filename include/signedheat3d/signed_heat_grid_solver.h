@@ -33,6 +33,9 @@ class SignedHeatGridSolver {
     std::array<size_t, 3> resolution = {32, 32, 32}; // number of vertices on x/y/z side of grid
     Vector3 bboxMin, bboxMax;
 
+    bool rebuild;
+    SignedHeat3DOptions lastOptions;
+
     SparseMatrix<double> laplaceMat;
     FaceData<double> faceAreas;    // of the source geometry
     FaceData<Vector3> faceNormals; // of the source geometry

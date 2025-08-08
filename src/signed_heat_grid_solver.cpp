@@ -19,7 +19,8 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> SignedHeatGridSolver::getBBox() con
 Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geometry,
                                                      const SignedHeat3DOptions& options) {
 
-    if (options.rebuild) {
+    rebuild = ((laplaceMat.rows() == 0) || ((laplaceMat.rows() > 0) && (lastOptions != options)));
+    if (rebuild) {
         if (VERBOSE) std::cerr << "Building grid..." << std::endl;
         std::chrono::time_point<high_resolution_clock> t1, t2;
         std::chrono::duration<double, std::milli> ms_fp;
@@ -39,6 +40,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         ms_fp = t2 - t1;
         if (VERBOSE) std::cerr << "Pre-compute time (s): " << ms_fp.count() / 1000. << std::endl;
     }
+    lastOptions = options;
 
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
     // With direct convolution in R^n, it's not clear what we should pick as our timestep. Use the
@@ -111,7 +113,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         RHS.head(totalNodes) = divYt;
         // clang-format off
         #ifndef SHM_NO_AMGCL
-        Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
+        bool success;
+        Vector<double> soln = AMGCL_solve(LHS, RHS, success, VERBOSE);
+        if (!success) soln = solveSquare(LHS, RHS);
         #else
         Vector<double> soln = solveSquare(LHS, RHS);
         #endif
@@ -129,7 +133,8 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
 Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNormalGeometry& pointGeom,
                                                      const SignedHeat3DOptions& options) {
 
-    if (options.rebuild) {
+    rebuild = ((laplaceMat.rows() == 0) || ((laplaceMat.rows() > 0) && (lastOptions != options)));
+    if (rebuild) {
         if (VERBOSE) std::cerr << "Building grid..." << std::endl;
         std::chrono::time_point<high_resolution_clock> t1, t2;
         std::chrono::duration<double, std::milli> ms_fp;
@@ -149,6 +154,7 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         ms_fp = t2 - t1;
         if (VERBOSE) std::cerr << "Pre-compute time (s): " << ms_fp.count() / 1000. << std::endl;
     }
+    lastOptions = options;
 
     if (VERBOSE) std::cerr << "Steps 1 & 2..." << std::endl;
     // With direct convolution in R^n, it's not clear what we should pick as our timestep. Use the
@@ -219,7 +225,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         RHS.head(totalNodes) = divYt;
         // clang-format off
         #ifndef SHM_NO_AMGCL
-        Vector<double> soln = AMGCL_solve(LHS, RHS, VERBOSE);
+        bool success;
+        Vector<double> soln = AMGCL_solve(LHS, RHS, success, VERBOSE);
+        if (!success) soln = solveSquare(LHS, RHS);
         #else
         Vector<double> soln = solveSquare(LHS, RHS);
         #endif

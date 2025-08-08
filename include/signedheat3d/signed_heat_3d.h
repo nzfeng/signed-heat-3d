@@ -37,7 +37,6 @@ using namespace geometrycentral::surface;
 struct SignedHeat3DOptions {
     LevelSetConstraint levelSetConstraint = LevelSetConstraint::ZeroSet;
     double tCoef = 1.0;
-    bool rebuild = true;
     Vector3 bboxMin = {1., 1., 1.};
     Vector3 bboxMax = {-1., -1., -1.};
     std::array<size_t, 3> resolution = {0, 0, 0};
@@ -45,7 +44,24 @@ struct SignedHeat3DOptions {
     bool fastIntegration = false;
     bool exportData = false;
     std::string meshname;
+
+    bool operator==(const SignedHeat3DOptions& other) const {
+        if (bboxMin != other.bboxMin) return false;
+        if (bboxMax != other.bboxMax) return false;
+        if (resolution != other.resolution) return false;
+        return true;
+    }
+
+    bool operator!=(const SignedHeat3DOptions& other) const {
+        return !(*this == other);
+    }
 };
+// bool operator==(const SignedHeat3DOptions& A, const SignedHeat3DOptions& B) {
+//     if (A.bboxMin != B.bboxMin) return false;
+//     if (A.bboxMax != B.bboxMax) return false;
+//     if (A.resolution != B.resolution) return false;
+//     return true;
+// }
 
 Vector3 centroid(VertexPositionGeometry& geometry);
 Vector3 centroid(pointcloud::PointPositionGeometry& pointGeom);
@@ -60,6 +76,6 @@ bool isResolutionValid(const std::array<size_t, 3>& resolution);
 std::pair<Vector3, Vector3> computeBBox(VertexPositionGeometry& geometry);
 std::pair<Vector3, Vector3> computeBBox(pointcloud::PointPositionNormalGeometry& pointGeom);
 
-Vector<double> AMGCL_solve(SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose = false);
+Vector<double> AMGCL_solve(SparseMatrix<double>& LHS, const Vector<double>& RHS, bool& success, bool verbose = false);
 Vector<double> AMGCL_blockSolve(const SparseMatrix<double>& L, const SparseMatrix<double>& A,
                                 const SparseMatrix<double>& Z, const Vector<double>& rhs, bool verbose = false);

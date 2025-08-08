@@ -35,6 +35,10 @@ class SignedHeatTetSolver {
     Eigen::MatrixXi getTets() const;
 
   private:
+    bool rebuild;
+    SignedHeat3DOptions lastOptions;
+    bool isConforming;
+
     // == mesh encoding input surface
     std::vector<int> surfaceFaces; // indexes into faces of tetmesh; sign indicates relative orientation
 

@@ -50,7 +50,6 @@ class SignedDistanceSolversTest : public ::testing::Test {
         // Set some "standard" options
         options.levelSetConstraint = LevelSetConstraint::ZeroSet;
         options.tCoef = 1.0;
-        options.rebuild = true;
         options.resolution = {16, 16, 16};
     }
 
@@ -230,11 +229,26 @@ TEST_F(SignedDistanceSolversTest, tetComputeDistanceToMesh) {
     ms_fp = t2 - t1;
     std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
 
+    phi = tetSolver->computeDistance(*geometry, options); // solve twice to test "rebuild" functionality
+
     Vector<double> sdf = tetDistanceToMesh();
 
     double error = (phi.cwiseAbs() - sdf.cwiseAbs()).mean() / range(sdf);
 
-    EXPECT_TRUE(std::abs(error) < 2e-2) << "SDF not close to approximate ground-truth, residual = " << error;
+    EXPECT_TRUE(std::abs(error) < 2e-2)
+        << "[LevelSetConstraint::ZeroSet] SDF not close to approximate ground-truth, residual = " << error;
+
+    options.levelSetConstraint = LevelSetConstraint::None;
+    phi = tetSolver->computeDistance(*geometry, options);
+    error = (phi.cwiseAbs() - sdf.cwiseAbs()).mean() / range(sdf);
+    EXPECT_TRUE(std::abs(error) < 2e-2)
+        << "[LevelSetConstraint::None] SDF not close to approximate ground-truth, residual = " << error;
+
+    options.levelSetConstraint = LevelSetConstraint::Multiple;
+    phi = tetSolver->computeDistance(*geometry, options);
+    error = (phi.cwiseAbs() - sdf.cwiseAbs()).mean() / range(sdf);
+    EXPECT_TRUE(std::abs(error) < 1e-1)
+        << "[LevelSetConstraint::Multiple] SDF not close to approximate ground-truth, residual = " << error;
 }
 
 TEST_F(SignedDistanceSolversTest, tetDistanceToPointCloud) {
@@ -244,11 +258,26 @@ TEST_F(SignedDistanceSolversTest, tetDistanceToPointCloud) {
     ms_fp = t2 - t1;
     std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
 
+    phi = tetSolver->computeDistance(*pointGeom, options); // solve twice to test "rebuild" functionality
+
     Vector<double> sdf = tetDistanceToMesh();
 
     double error = (phi.cwiseAbs() - sdf.cwiseAbs()).mean() / range(sdf);
 
-    EXPECT_TRUE(std::abs(error) < 2e-2) << "SDF not close to approximate ground-truth, residual = " << error;
+    EXPECT_TRUE(std::abs(error) < 2e-2)
+        << "[LevelSetConstraint::ZeroSet] SDF not close to approximate ground-truth, residual = " << error;
+
+    options.levelSetConstraint = LevelSetConstraint::None;
+    phi = tetSolver->computeDistance(*pointGeom, options);
+    error = (phi.cwiseAbs() - sdf.cwiseAbs()).mean() / range(sdf);
+    EXPECT_TRUE(std::abs(error) < 2e-1)
+        << "[LevelSetConstraint::None] SDF not close to approximate ground-truth, residual = " << error;
+
+    options.levelSetConstraint = LevelSetConstraint::Multiple;
+    phi = tetSolver->computeDistance(*pointGeom, options);
+    error = (phi.cwiseAbs() - sdf.cwiseAbs()).mean() / range(sdf);
+    EXPECT_TRUE(std::abs(error) < 2e-2)
+        << "[LevelSetConstraint::Multiple] SDF not close to approximate ground-truth, residual = " << error;
 }
 
 TEST_F(SignedDistanceSolversTest, gridDistanceToMesh) {
@@ -257,6 +286,8 @@ TEST_F(SignedDistanceSolversTest, gridDistanceToMesh) {
     t2 = high_resolution_clock::now();
     ms_fp = t2 - t1;
     std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
+
+    phi = gridSolver->computeDistance(*geometry, options); // solve twice to test "rebuild" functionality
 
     Vector<double> sdf = gridDistanceToMesh();
 
@@ -271,6 +302,8 @@ TEST_F(SignedDistanceSolversTest, gridDistanceToPointCloud) {
     t2 = high_resolution_clock::now();
     ms_fp = t2 - t1;
     std::cerr << "Solve time (s): " << ms_fp.count() / 1000. << std::endl;
+
+    phi = gridSolver->computeDistance(*pointGeom, options); // solve twice to test "rebuild" functionality
 
     Vector<double> sdf = gridDistanceToMesh();
 

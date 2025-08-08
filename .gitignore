@@ -3,6 +3,7 @@ export/
 build/
 **/build/
 **/*.ppm
+**/site_build/
 
 # Editor and OS things
 .DS_Store
