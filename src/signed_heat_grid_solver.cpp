@@ -115,9 +115,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
         #ifndef SHM_NO_AMGCL
         bool success;
         Vector<double> soln = AMGCL_solve(LHS, RHS, success, VERBOSE);
-        if (!success) soln = solveSquare(LHS, RHS);
+        if (!success) soln = solveSquareSystem(LHS, RHS, VERBOSE);
         #else
-        Vector<double> soln = solveSquare(LHS, RHS);
+        Vector<double> soln = solveSquareSystem(LHS, RHS, VERBOSE);
         #endif
         // clang-format on
         phi = -soln.head(totalNodes);
@@ -227,9 +227,9 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
         #ifndef SHM_NO_AMGCL
         bool success;
         Vector<double> soln = AMGCL_solve(LHS, RHS, success, VERBOSE);
-        if (!success) soln = solveSquare(LHS, RHS);
+        if (!success) soln = solveSquareSystem(LHS, RHS, VERBOSE);
         #else
-        Vector<double> soln = solveSquare(LHS, RHS);
+        Vector<double> soln = solveSquareSystem(LHS, RHS, VERBOSE);
         #endif
         // clang-format on
         phi = -soln.head(totalNodes);
