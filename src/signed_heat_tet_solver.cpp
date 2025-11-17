@@ -210,9 +210,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         #ifndef SHM_NO_AMGCL
         bool success;
         Vector<double> Aresult = AMGCL_solve(decomp.AA, combinedRHS, success, VERBOSE);
-        if (!success) Aresult = solvePositiveDefinite(decomp.AA, combinedRHS); // success
+        if (!success) Aresult = solvePositiveDefiniteSystem(decomp.AA, combinedRHS); // success
         #else
-        Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+        Vector<double> Aresult = solvePositiveDefiniteSystem(decomp.AA, combinedRHS);
         #endif
         // clang-format on
         phi = reassembleVector(decomp, Aresult, bcVals);
@@ -256,9 +256,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         #ifndef SHM_NO_AMGCL
         bool success;
         Vector<double> soln = AMGCL_solve(LHS, RHS, success, VERBOSE);
-        if (!success) soln = solveSquare(LHS, RHS); // direct solver
+        if (!success) soln = solveSquareSystem(LHS, RHS); // direct solver
         #else 
-        Vector<double> soln = solveSquare(LHS, RHS);
+        Vector<double> soln = solveSquareSystem(LHS, RHS);
         #endif
         // clang-format on
         phi = soln.head(nVertices);
@@ -358,9 +358,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         #ifndef SHM_NO_AMGCL
         bool success;
         Vector<double> soln = AMGCL_solve(LHS, RHS, success, VERBOSE);
-        if (!success) soln = solveSquare(LHS, RHS);
+        if (!success) soln = solveSquareSystem(LHS, RHS);
         #else
-        Vector<double> soln = solveSquare(LHS, RHS);
+        Vector<double> soln = solveSquareSystem(LHS, RHS);
         #endif
         // clang-format on
         phi = soln.head(nFaces);
@@ -447,9 +447,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             #ifndef SHM_NO_AMGCL
             bool success;
             Vector<double> Aresult = AMGCL_solve(decomp.AA, combinedRHS, success, VERBOSE);
-            if (!success) Aresult = solvePositiveDefinite(decomp.AA, combinedRHS); // direct solver
+            if (!success) Aresult = solvePositiveDefiniteSystem(decomp.AA, combinedRHS); // direct solver
             #else
-            Vector<double> Aresult = solvePositiveDefinite(decomp.AA, combinedRHS);
+            Vector<double> Aresult = solvePositiveDefiniteSystem(decomp.AA, combinedRHS);
             #endif
             // clang-format on
             phi = reassembleVector(decomp, Aresult, bcVals);
@@ -495,9 +495,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             #ifndef SHM_NO_AMGCL
             bool success;
             Vector<double> soln = AMGCL_solve(LHS, RHS, success, VERBOSE);
-            if (!success) soln = solveSquare(LHS, RHS); // direct solver
+            if (!success) soln = solveSquareSystem(LHS, RHS); // direct solver
             #else
-            Vector<double> soln = solveSquare(LHS, RHS);
+            Vector<double> soln = solveSquareSystem(LHS, RHS);
             #endif
             #// clang-format on
             phi = soln.head(nVertices);

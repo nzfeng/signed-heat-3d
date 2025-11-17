@@ -77,6 +77,7 @@ std::pair<Vector3, Vector3> computeBBox(VertexPositionGeometry& geometry);
 std::pair<Vector3, Vector3> computeBBox(pointcloud::PointPositionNormalGeometry& pointGeom);
 
 Vector<double> solveSquareSystem(SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose = false);
+Vector<double> solvePositiveDefiniteSystem(SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose = false);
 Vector<double> AMGCL_solve(SparseMatrix<double>& LHS, const Vector<double>& RHS, bool& success, bool verbose = false);
 Vector<double> AMGCL_blockSolve(const SparseMatrix<double>& L, const SparseMatrix<double>& A,
                                 const SparseMatrix<double>& Z, const Vector<double>& rhs, bool verbose = false);
