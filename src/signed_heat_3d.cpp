@@ -187,7 +187,7 @@ Vector<double> solvePositiveDefiniteSystem(SparseMatrix<double>& LHS, const Vect
     Vector<double> soln;
     try {
         solver.reset(new PositiveDefiniteSolver<double>(LHS));
-        soln = solver->solve(RHS)
+        soln = solver->solve(RHS);
     } catch (const std::exception& e) {
         if (verbose) std::cerr << "Caught exception: " << e.what() << std::endl;
         success = false;
@@ -205,8 +205,8 @@ Vector<double> solvePositiveDefiniteSystem(SparseMatrix<double>& LHS, const Vect
         cg.compute(LHS);
         soln = cg.solve(RHS);
         if (verbose) {
-            std::cout << "\t#iterations:     " << solver.iterations() << std::endl;
-            std::cout << "\testimated error: " << solver.error() << std::endl;
+            std::cout << "\t#iterations:     " << cg.iterations() << std::endl;
+            std::cout << "\testimated error: " << cg.error() << std::endl;
         }
     }
     return soln;
