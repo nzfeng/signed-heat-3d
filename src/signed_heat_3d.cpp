@@ -180,6 +180,38 @@ Vector<double> solvePositiveDefiniteSystem(SparseMatrix<double>& LHS, const Vect
     return soln;
 }
 
+Vector<double> solvePositiveDefiniteSystem(SparseMatrix<double>& LHS, const Vector<double>& RHS,
+                                           std::unique_ptr<PositiveDefiniteSolver<double>>& solver, bool factorize,
+                                           bool verbose) {
+    bool success = true;
+    Vector<double> soln;
+    try {
+        solver.reset(new PositiveDefiniteSolver<double>(LHS));
+        soln = solver->solve(RHS)
+    } catch (const std::exception& e) {
+        if (verbose) std::cerr << "Caught exception: " << e.what() << std::endl;
+        success = false;
+    }
+
+    double solnNorm = soln.norm();
+    double error = (LHS * soln - RHS).norm();
+    double tol = 1.0;
+    if (verbose) std::cerr << "Direct solver residual: " << error << std::endl;
+    if (std::isinf(solnNorm) || std::isnan(solnNorm) || abs(error) > tol) {
+        if (verbose) std::cerr << "Direct solver failed, using iterative solver" << std::endl;
+        success = false;
+
+        Eigen::ConjugateGradient<SparseMatrix<double>, Eigen::Lower | Eigen::Upper> cg;
+        cg.compute(LHS);
+        soln = cg.solve(RHS);
+        if (verbose) {
+            std::cout << "\t#iterations:     " << solver.iterations() << std::endl;
+            std::cout << "\testimated error: " << solver.error() << std::endl;
+        }
+    }
+    return soln;
+}
+
 #ifndef SHM_NO_AMGCL
 Vector<double> AMGCL_solve(SparseMatrix<double>& L, const Vector<double>& RHS, bool& success, bool verbose) {
 

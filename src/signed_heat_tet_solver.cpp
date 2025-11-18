@@ -265,11 +265,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         double shift = averageVertexDataOnSource(geometry, phi);
         phi -= shift * Vector<double>::Ones(nVertices);
     } else {
-        auto solveDirect = [&]() -> Vector<double> {
-            if (rebuild || poissonSolver == nullptr) {
-                if (VERBOSE) std::cerr << "\tFactorizing..." << std::endl;
-                poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
-            }
+        auto solveFallback = [&]() -> Vector<double> {
+            phi = solvePositiveDefiniteSystem(laplaceMat, div, poissonSolver, rebuild || poissonSolver == nullptr,
+                                              VERBOSE);
             phi = poissonSolver->solve(div);
             double shift = averageVertexDataOnSource(geometry, phi);
             phi -= shift * Vector<double>::Ones(nVertices);
@@ -279,9 +277,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         #ifndef SHM_NO_AMGCL
         bool success;
         phi = AMGCL_solve(laplaceMat, div, success, VERBOSE);
-        if (!success) phi = solveDirect();
+        if (!success) phi = solveFallback();
         #else
-        phi = solveDirect();
+        phi = solveFallback();
         #endif
         // clang-format on
     }
@@ -367,11 +365,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         double shift = averageFaceDataOnSource(geometry, phi);
         phi -= shift * Vector<double>::Ones(nFaces);
     } else {
-        auto solveDirect = [&]() -> Vector<double> {
-            if (rebuild || poissonSolverCR == nullptr) {
-                if (VERBOSE) std::cerr << "\tFactorizing..." << std::endl;
-                poissonSolverCR.reset(new PositiveDefiniteSolver<double>(laplaceCR));
-            }
+        auto solveFallback = [&]() -> Vector<double> {
+            phi = solvePositiveDefiniteSystem(laplaceCR, div, poissonSolverCR, rebuild || poissonSolverCR == nullptr,
+                                              VERBOSE);
             phi = poissonSolverCR->solve(div);
             double shift = averageFaceDataOnSource(geometry, phi);
             phi -= shift * Vector<double>::Ones(nFaces);
@@ -381,9 +377,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         #ifndef SHM_NO_AMGCL
         bool success;
         phi = AMGCL_solve(laplaceCR, div, success, VERBOSE);
-        if (!success) phi = solveDirect();
+        if (!success) phi = solveFallback();
         #else
-        phi = solveDirect();
+        phi = solveFallback();
         #endif
         // clang-format on
     }
@@ -410,11 +406,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
         case (LevelSetConstraint::None): {
             Vector<double> div = vertexDivergence(Yt);
 
-            auto solveDirect = [&]() -> Vector<double> {
-                if (rebuild || poissonSolver == nullptr) {
-                    if (VERBOSE) std::cerr << "\tFactorizing..." << std::endl;
-                    poissonSolver.reset(new PositiveDefiniteSolver<double>(laplaceMat));
-                }
+            auto solveFallback = [&]() -> Vector<double> {
+                phi = solvePositiveDefiniteSystem(laplaceMat, div, poissonSolver, rebuild || poissonSolver == nullptr,
+                                                  VERBOSE);
                 phi = poissonSolver->solve(div);
                 double shift = averageVertexDataOnSource(pointGeom, phi);
                 phi -= shift * Vector<double>::Ones(nVertices);
@@ -425,9 +419,9 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             #ifndef SHM_NO_AMGCL
             bool success;
             phi = AMGCL_solve(laplaceMat, div, success, VERBOSE);
-            if (!success) phi = solveDirect();
+            if (!success) phi = solveFallback();
             #else
-            phi = solveDirect();
+            phi = solveFallback();
             #endif
             // clang-format on
             break;
