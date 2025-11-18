@@ -121,97 +121,6 @@ void setFaceVectorAreas(VertexPositionGeometry& geometry, FaceData<double>& area
     }
 }
 
-/* A wrapper function around solveSquare, to handle occasional failures of direct solver. */
-Vector<double> solveSquareSystem(SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose) {
-    bool success = true;
-    Vector<double> soln;
-    try {
-        soln = solveSquare(LHS, RHS);
-    } catch (const std::exception& e) {
-        if (verbose) std::cerr << "Caught exception: " << e.what() << std::endl;
-        success = false;
-    }
-
-    double solnNorm = soln.norm();
-    double error = (LHS * soln - RHS).norm();
-    double tol = 1.0;
-    if (verbose) std::cerr << "Direct solver residual: " << error << std::endl;
-    if (std::isinf(solnNorm) || std::isnan(solnNorm) || abs(error) > tol) {
-        if (verbose) std::cerr << "Direct solver failed, using iterative solver" << std::endl;
-        success = false;
-
-        Eigen::BiCGSTAB<SparseMatrix<double>> solver;
-        solver.compute(LHS);
-        soln = solver.solve(RHS);
-        if (verbose) {
-            std::cout << "\t#iterations:     " << solver.iterations() << std::endl;
-            std::cout << "\testimated error: " << solver.error() << std::endl;
-        }
-    }
-    return soln;
-}
-
-Vector<double> solvePositiveDefiniteSystem(SparseMatrix<double>& LHS, const Vector<double>& RHS, bool verbose) {
-    bool success = true;
-    Vector<double> soln;
-    try {
-        soln = solvePositiveDefinite(LHS, RHS);
-    } catch (const std::exception& e) {
-        if (verbose) std::cerr << "Caught exception: " << e.what() << std::endl;
-        success = false;
-    }
-
-    double solnNorm = soln.norm();
-    double error = (LHS * soln - RHS).norm();
-    double tol = 1.0;
-    if (verbose) std::cerr << "Direct solver residual: " << error << std::endl;
-    if (std::isinf(solnNorm) || std::isnan(solnNorm) || abs(error) > tol) {
-        if (verbose) std::cerr << "Direct solver failed, using iterative solver" << std::endl;
-        success = false;
-
-        Eigen::ConjugateGradient<SparseMatrix<double>, Eigen::Lower | Eigen::Upper> solver;
-        solver.compute(LHS);
-        soln = solver.solve(RHS);
-        if (verbose) {
-            std::cout << "\t#iterations:     " << solver.iterations() << std::endl;
-            std::cout << "\testimated error: " << solver.error() << std::endl;
-        }
-    }
-    return soln;
-}
-
-Vector<double> solvePositiveDefiniteSystem(SparseMatrix<double>& LHS, const Vector<double>& RHS,
-                                           std::unique_ptr<PositiveDefiniteSolver<double>>& solver, bool factorize,
-                                           bool verbose) {
-    bool success = true;
-    Vector<double> soln;
-    try {
-        solver.reset(new PositiveDefiniteSolver<double>(LHS));
-        soln = solver->solve(RHS);
-    } catch (const std::exception& e) {
-        if (verbose) std::cerr << "Caught exception: " << e.what() << std::endl;
-        success = false;
-    }
-
-    double solnNorm = soln.norm();
-    double error = (LHS * soln - RHS).norm();
-    double tol = 1.0;
-    if (verbose) std::cerr << "Direct solver residual: " << error << std::endl;
-    if (std::isinf(solnNorm) || std::isnan(solnNorm) || abs(error) > tol) {
-        if (verbose) std::cerr << "Direct solver failed, using iterative solver" << std::endl;
-        success = false;
-
-        Eigen::ConjugateGradient<SparseMatrix<double>, Eigen::Lower | Eigen::Upper> cg;
-        cg.compute(LHS);
-        soln = cg.solve(RHS);
-        if (verbose) {
-            std::cout << "\t#iterations:     " << cg.iterations() << std::endl;
-            std::cout << "\testimated error: " << cg.error() << std::endl;
-        }
-    }
-    return soln;
-}
-
 #ifndef SHM_NO_AMGCL
 Vector<double> AMGCL_solve(SparseMatrix<double>& L, const Vector<double>& RHS, bool& success, bool verbose) {
 
@@ -243,10 +152,10 @@ Vector<double> AMGCL_solve(SparseMatrix<double>& L, const Vector<double>& RHS, b
         std::tie(iters, error) = solve(LHS, RHS, x);
     } catch (const std::exception& e) {
         if (verbose) {
-            std::cerr << "Caught exception: " << e.what() << std::endl;
+            std::cerr << "Caught exception: '" << e.what() << std::endl;
             std::cerr << "Use direct solver" << std::endl;
+            success = false;
         }
-        success = false;
         return x;
     }
     if (verbose) std::cerr << "AMGCL # iters: " << iters << "\tAMGCL residual: " << error << std::endl;
