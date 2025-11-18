@@ -268,7 +268,6 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(VertexPositionGeometry&
         auto solveFallback = [&]() -> Vector<double> {
             phi = solvePositiveDefiniteSystem(laplaceMat, div, poissonSolver, rebuild || poissonSolver == nullptr,
                                               VERBOSE);
-            phi = poissonSolver->solve(div);
             double shift = averageVertexDataOnSource(geometry, phi);
             phi -= shift * Vector<double>::Ones(nVertices);
             return phi;
@@ -368,7 +367,6 @@ Vector<double> SignedHeatTetSolver::integrateVectorFieldToFaces(VertexPositionGe
         auto solveFallback = [&]() -> Vector<double> {
             phi = solvePositiveDefiniteSystem(laplaceCR, div, poissonSolverCR, rebuild || poissonSolverCR == nullptr,
                                               VERBOSE);
-            phi = poissonSolverCR->solve(div);
             double shift = averageFaceDataOnSource(geometry, phi);
             phi -= shift * Vector<double>::Ones(nFaces);
             return phi;
@@ -409,7 +407,6 @@ Vector<double> SignedHeatTetSolver::integrateVectorField(pointcloud::PointPositi
             auto solveFallback = [&]() -> Vector<double> {
                 phi = solvePositiveDefiniteSystem(laplaceMat, div, poissonSolver, rebuild || poissonSolver == nullptr,
                                                   VERBOSE);
-                phi = poissonSolver->solve(div);
                 double shift = averageVertexDataOnSource(pointGeom, phi);
                 phi -= shift * Vector<double>::Ones(nVertices);
                 return phi;
