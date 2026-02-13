@@ -99,7 +99,8 @@ Vector<double> SignedHeatGridSolver::computeDistance(VertexPositionGeometry& geo
             size_t nodeIdx = indicesToNodeIndex(i, j, k);
             if (hasCellBeenUsed[nodeIdx]) continue;
             trilinearCoefficients(b, nodeIndices, coeffs);
-            for (size_t i = 0; i < nodeIndices.size(); i++) tripletList.emplace_back(m, nodeIndices[i], coeffs[i]);
+            for (size_t idx = 0; idx < nodeIndices.size(); idx++)
+                tripletList.emplace_back(m, nodeIndices[idx], coeffs[idx]);
             hasCellBeenUsed[nodeIdx] = true;
             m++;
         }
@@ -211,7 +212,8 @@ Vector<double> SignedHeatGridSolver::computeDistance(pointcloud::PointPositionNo
             size_t nodeIdx = indicesToNodeIndex(i, j, k);
             if (hasCellBeenUsed[nodeIdx]) continue;
             trilinearCoefficients(b, nodeIndices, coeffs);
-            for (size_t i = 0; i < nodeIndices.size(); i++) tripletList.emplace_back(m, nodeIndices[i], coeffs[i]);
+            for (size_t idx = 0; idx < nodeIndices.size(); idx++)
+                tripletList.emplace_back(m, nodeIndices[idx], coeffs[idx]);
             hasCellBeenUsed[nodeIdx] = true;
             m++;
         }
