@@ -28,10 +28,22 @@ sudo apt-get -y install libboost-dev libboost-test-dev libboost-program-options-
 ```
 Windows users should probably follow the instructions on the [Boost website](https://www.boost.org/releases/latest/).
 
-3. There are still several further obvious areas of performance improvement, which haven't been implemented yet:
+## User tips
+
+There are still several further obvious areas of performance improvement, which haven't been implemented yet:
 * In 3D domains, Step 1 of the Signed Heat Method (vector diffusion) can be done by convolution; the integral is evaluted simply by direct summation, even though this summation is trivially parallelizable. 
 * One could optimize loop order when iterating over source/domain elements (whichever is smaller) for better cache behavior.
 * More performance-critical implementations could also implement hierarchical summation.
+
+Be aware of the method's dependency on meshing: for example, the resulting SDF will probably not look great if you only use a 2 x 2 x 2 grid (that's only 8 samples total of the SDF --- not enough to capture beyond the coarsest of details.)
+
+Relatedly, note that adaptive grid-based meshing has not yet been implemented, though the tetrahedral meshing _is_ adaptive (may be relevant if using this library for surface reconstruction in particular). 
+
+![teaser image](https://github.com/nzfeng/signed-heat-3d/blob/main/media/GridVsTetrahedral.png)
+
+To gain an understanding of what this entails: in the above figure, the tet mesh discretization of the volumetric domain yields more faithful reconstruction than using a grid with a similar number of degrees of freedom (DOFs), since its DOFs are adapted to the input. A tet mesh can also be made to be constrained to the input shape boundary, enabling exact enforcement of zero set constraints. (On the other hand, the far-field accuracy of the SDF on the tet mesh is lower where tets are coarser.) Contributions to `signed-heat-3d` are welcome.
+
+The library also only uses standard marching cubes and marching tets to contour (extract) level set surfaces of the resulting SDF. Better reconstruction can be obtained by using e.g. dual contouring --- though it's totally possible to feed the results to any contouring algorithm of your choice, and contributions to the library itself are also welcome!
 
 ## Citation
 
