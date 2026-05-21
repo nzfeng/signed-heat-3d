@@ -39,7 +39,7 @@ Windows users should probably follow the instructions on the [Boost website](htt
 
 3. Relatedly, note that adaptive grid-based meshing has not yet been implemented, though the tetrahedral meshing _is_ adaptive (may be relevant if using this library for surface reconstruction in particular). 
 
-![adaptive meshing](media/GridVsTetrahedral.png)
+<img src="media/GridVsTetrahedral.png" width=50%/>
 
 To gain an understanding of what this entails: in the above figure, the tet mesh discretization of the volumetric domain yields more faithful reconstruction than using a grid with a similar number of degrees of freedom (DOFs), since its DOFs are adapted to the input. A tet mesh can also be made to be constrained to the input shape boundary, enabling exact enforcement of zero set constraints. (On the other hand, the far-field accuracy of the SDF on the tet mesh is lower where tets are coarser.) Contributions to `signed-heat-3d` are welcome.
 
